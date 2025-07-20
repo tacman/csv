@@ -25,9 +25,10 @@ use League\Csv\Statement;
 
 $csv = Reader::createFromPath('/path/to/your/csv/file.csv', 'r');
 $csv->setHeaderOffset(0); //set the CSV header offset
+$csv->setEscape(''); //required in PHP8.4+ to avoid deprecation notices
 
 //get 25 records starting from the 11th row
-$stmt = Statement::create()
+$stmt = new Statement()
     ->offset(10)
     ->limit(25)
 ;
@@ -57,6 +58,7 @@ $sth->execute();
 
 // We create the CSV into memory
 $csv = Writer::createFromFileObject(new SplTempFileObject());
+$csv->setEscape(''); //required in PHP8.4+ to avoid deprecation notices
 
 // We insert the CSV header
 $csv->insertOne(['firstname', 'lastname', 'email']);
@@ -90,6 +92,7 @@ $sth = $dbh->prepare(
 // with the header record and remove it from the iteration
 $csv = Reader::createFromPath('/path/to/your/csv/file.csv')
     ->setHeaderOffset(0)
+    ->setEscape('') //required in PHP8.4+ to avoid deprecation notices
 ;
 
 foreach ($csv as $record) {
@@ -106,16 +109,17 @@ foreach ($csv as $record) {
 It is not possible to detect the character encoding a CSV document (e.g. `UTF-8`, `UTF-16`, etc). However, it *is* possible to detect the input BOM and convert to UTF-8 where necessary.
 
 ```php
+use League\Csv\Bom;
 use League\Csv\Reader;
 use League\Csv\CharsetConverter;
 
 $csv = Reader::createFromPath('/path/to/your/csv/file.csv', 'r');
 $csv->setHeaderOffset(0);
+$csv->setEscape(''); //required in PHP8.4+ to avoid deprecation notices
 
-$input_bom = $csv->getInputBOM();
-
-if ($input_bom === Reader::BOM_UTF16_LE || $input_bom === Reader::BOM_UTF16_BE) {
-    CharsetConverter::addTo($csv, 'utf-16', 'utf-8');
+$inputBom = Bom::tryFrom($csv->getInputBOM());
+if ($inputBom instanceof Bom && !$inputBom->isUtf8()) {
+    CharsetConverter::addTo($csv, $inputBom->encoding(), Bom::Utf8->encoding());
 }
 
 foreach ($csv as $record) {
@@ -134,8 +138,9 @@ use League\Csv\Reader;
 $csv = Reader::createFromPath('/path/to/prenoms.csv', 'r')
 $csv->setDelimiter(';');
 $csv->setHeaderOffset(0);
+$csv->setEscape(''); //required in PHP8.4+ to avoid deprecation notices
 
-$converter = (new XMLConverter())
+$converter = new XMLConverter()
     ->rootElement('csv')
     ->recordElement('record', 'offset')
     ->fieldElement('field', 'name')

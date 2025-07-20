@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace League\Csv;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
@@ -20,16 +21,18 @@ use SplFileObject;
 use SplTempFileObject;
 
 use function chr;
+use function fopen;
 use function function_exists;
+use function implode;
 use function ob_get_clean;
 use function ob_start;
 use function strtolower;
+use function tempnam;
 use function tmpfile;
 use function unlink;
 use function xdebug_get_headers;
 
 use const PHP_EOL;
-use const PHP_VERSION_ID;
 
 #[Group('csv')]
 final class AbstractCsvTest extends TestCase
@@ -44,7 +47,7 @@ final class AbstractCsvTest extends TestCase
     {
         $tmp = new SplTempFileObject();
         foreach ($this->expected as $row) {
-            $tmp->fputcsv($row);
+            $tmp->fputcsv($row, escape: '\\');
         }
 
         $this->csv = Reader::createFromFileObject($tmp);
@@ -97,7 +100,7 @@ EOF;
 
         return [
             'invalid UTF32-BE' => ['', $invalidBOM, ';'],
-            'valid UTF32-BE' => [ByteSequence::BOM_UTF32_BE, $validBOM, ';'],
+            'valid UTF32-BE' => [Bom::Utf32Be->value, $validBOM, ';'],
         ];
     }
 
@@ -111,16 +114,16 @@ EOF;
     public function testOutputSize(): void
     {
         ob_start();
-        $length = $this->csv->output('test.csv');
+        $length = $this->csv->download('test.csv');
         ob_end_clean();
         self::assertSame(60, $length);
     }
 
     public function testInvalidOutputFile(): void
     {
-        $this->expectException(InvalidArgument::class);
+        $this->expectException(InvalidArgumentException::class);
 
-        $this->csv->output('invalid/file.csv');
+        $this->csv->download('invalid/file.csv');
     }
 
     public function testOutputHeaders(): void
@@ -129,19 +132,23 @@ EOF;
             self::markTestSkipped(__METHOD__.' needs the xdebug extension to run');
         }
 
-        $raw_csv = ByteSequence::BOM_UTF8."john,doe,john.doe@example.com\njane,doe,jane.doe@example.com\n";
+        $raw_csv = Bom::Utf8->value."john,doe,john.doe@example.com\njane,doe,jane.doe@example.com\n";
         $csv = Reader::createFromString($raw_csv);
         ob_start();
-        $csv->output('tést.csv');
+        $csv->download('tést.csv');
         ob_end_clean();
         $headers = xdebug_get_headers();
+        if ([] === $headers) {
+            self::markTestSkipped(__METHOD__.' needs the xdebug function `xdebug_get_headers` to run and returns actual data.');
+        }
+        $header = implode("\n", $headers);
 
         // Due to the variety of ways the xdebug expresses Content-Type of text files,
         // we cannot count on complete string matching.
-        self::assertStringContainsString('content-type: text/csv', strtolower($headers[0]));
-        self::assertSame('Content-Transfer-Encoding: binary', $headers[1]);
-        self::assertSame('Content-Description: File Transfer', $headers[2]);
-        self::assertStringContainsString('Content-Disposition: attachment; filename="tst.csv"; filename*=utf-8\'\'t%C3%A9st.csv', $headers[3]);
+        self::assertStringContainsString('content-type: text/csv', strtolower($header));
+        self::assertStringContainsString('content-transfer-encoding: binary', strtolower($header));
+        self::assertStringContainsString('content-description: File Transfer', $header);
+        self::assertStringContainsString('content-disposition: attachment;filename="tst.csv";filename*=UTF-8\'\'t%c3%a9st.csv', $header);
     }
 
     public function testChunkDoesNotTimeoutAfterReading(): void
@@ -176,15 +183,53 @@ EOF;
 
     public function testChunk(): void
     {
-        $raw_csv = ByteSequence::BOM_UTF8."john,doe,john.doe@example.com\njane,doe,jane.doe@example.com\n";
-        $csv = Reader::createFromString($raw_csv)->setOutputBOM(ByteSequence::BOM_UTF32_BE);
-        $expected = ByteSequence::BOM_UTF32_BE."john,doe,john.doe@example.com\njane,doe,jane.doe@example.com\n";
+        $raw_csv = Bom::Utf8->value."john,doe,john.doe@example.com\njane,doe,jane.doe@example.com\n";
+        $csv = Reader::createFromString($raw_csv)->setOutputBOM(Bom::Utf32Be->value);
+        $expected = Bom::Utf32Be->value."john,doe,john.doe@example.com\njane,doe,jane.doe@example.com\n";
         $res = '';
         foreach ($csv->chunk(32) as $chunk) {
             $res .= $chunk;
         }
 
         self::assertSame($expected, $res);
+    }
+
+    public function testSetOutputBOMTriggersException(): void
+    {
+        $this->expectException(InvalidArgument::class);
+
+        Reader::createFromString()->setOutputBOM('toto');
+    }
+
+    #[DataProvider('provdesValidOutputBomSequences')]
+    public function testSetOutputBOM(string $expected, Bom|string|null $bom): void
+    {
+        self::assertSame(
+            $expected,
+            Reader::createFromString()->setOutputBOM($bom)->getOutputBOM()
+        );
+    }
+
+    public static function provdesValidOutputBomSequences(): array
+    {
+        return [
+            'null' => [
+                'expected' => '',
+                'bom' => null,
+            ],
+            'empty string' => [
+                'expected' => '',
+                'bom' => '',
+            ],
+            'using a BOM string' => [
+                'expected' => Bom::Utf8->value,
+                'bom' => Bom::Utf8->value,
+            ],
+            'using a BOM instance' => [
+                'expected' => Bom::Utf8->value,
+                'bom' => Bom::Utf8,
+            ],
+        ];
     }
 
     #[DataProvider('provideCsvFilterTestingData')]
@@ -202,6 +247,12 @@ EOF;
         yield 'Reader with stream capability' => [
             'csv' => Reader::createFromString(),
             'useFilterRead' => true,
+            'useFilterWrite' => true,
+        ];
+
+        yield 'Reader with stream capability but without write capability' => [
+            'csv' => Reader::createFromStream(fopen('php://temp', 'r')), /* @phpstan-ignore-line */
+            'useFilterRead' => true,
             'useFilterWrite' => false,
         ];
 
@@ -213,6 +264,12 @@ EOF;
 
         yield 'Writer with stream capability' => [
             'csv' => Writer::createFromString(),
+            'useFilterRead' => true,
+            'useFilterWrite' => true,
+        ];
+
+        yield 'Writer with stream capability but without read capabilities' => [
+            'csv' => Writer::createFromStream(fopen(tempnam('/tmp', 'foo'), 'w')), /* @phpstan-ignore-line */
             'useFilterRead' => false,
             'useFilterWrite' => true,
         ];
@@ -239,8 +296,8 @@ EOF;
     {
         self::assertSame('', $this->csv->getOutputBOM());
 
-        $this->csv->setOutputBOM(ByteSequence::BOM_UTF8);
-        self::assertSame(ByteSequence::BOM_UTF8, $this->csv->getOutputBOM());
+        $this->csv->setOutputBOM(Bom::Utf8->value);
+        self::assertSame(Bom::Utf8->value, $this->csv->getOutputBOM());
 
         $this->csv->setOutputBOM('');
         self::assertSame('', $this->csv->getOutputBOM());
@@ -248,7 +305,7 @@ EOF;
 
     public function testAddBOMSequences(): void
     {
-        $this->csv->setOutputBOM(ByteSequence::BOM_UTF8);
+        $this->csv->setOutputBOM(Bom::Utf8->value);
         $expected = chr(239).chr(187).chr(191).'john,doe,john.doe@example.com'.PHP_EOL
             .'jane,doe,jane.doe@example.com'.PHP_EOL;
         self::assertSame($expected, $this->csv->toString());
@@ -258,10 +315,10 @@ EOF;
     {
         $text = 'john,doe,john.doe@example.com'.PHP_EOL
             .'jane,doe,jane.doe@example.com'.PHP_EOL;
-        $reader = Reader::createFromString(ByteSequence::BOM_UTF32_BE.$text);
-        $reader->setOutputBOM(ByteSequence::BOM_UTF8);
+        $reader = Reader::createFromString(Bom::Utf32Be->value.$text);
+        $reader->setOutputBOM(Bom::Utf8->value);
 
-        self::assertSame(ByteSequence::BOM_UTF8.$text, $reader->toString());
+        self::assertSame(Bom::Utf8->value.$text, $reader->toString());
     }
 
     public function testEscape(): void
@@ -286,28 +343,28 @@ EOF;
         $this->csv->setEnclosure('foo');
     }
 
-    public function testAddStreamFilter(): void
+    public function testappendStreamFilter(): void
     {
         $csv = Reader::createFromPath(__DIR__.'/../test_files/foo.csv');
-        $csv->addStreamFilter('string.rot13');
-        $csv->addStreamFilter('string.tolower');
-        $csv->addStreamFilter('string.toupper');
+        $csv->appendStreamFilterOnRead('string.rot13');
+        $csv->appendStreamFilterOnRead('string.tolower');
+        $csv->appendStreamFilterOnRead('string.toupper');
         foreach ($csv as $row) {
             self::assertSame($row, ['WBUA', 'QBR', 'WBUA.QBR@RKNZCYR.PBZ']);
         }
     }
 
-    public function testFailedAddStreamFilter(): void
+    public function testFailedappendStreamFilter(): void
     {
         $csv = Writer::createFromFileObject(new SplTempFileObject());
         self::assertFalse($csv->supportsStreamFilterOnWrite());
 
         $this->expectException(UnavailableFeature::class);
 
-        $csv->addStreamFilter('string.toupper');
+        $csv->appendStreamFilterOnRead('string.toupper');
     }
 
-    public function testFailedAddStreamFilterWithWrongFilter(): void
+    public function testFailedappendStreamFilterWithWrongFilter(): void
     {
         $this->expectException(InvalidArgument::class);
 
@@ -315,7 +372,7 @@ EOF;
         $tmpfile = tmpfile();
 
         Writer::createFromStream($tmpfile)
-            ->addStreamFilter('foobar.toupper');
+            ->appendStreamFilterOnRead('foobar.toupper');
     }
 
     public function testStreamFilterDetection(): void
@@ -325,7 +382,7 @@ EOF;
 
         self::assertFalse($csv->hasStreamFilter($filtername));
 
-        $csv->addStreamFilter($filtername);
+        $csv->appendStreamFilterOnRead($filtername);
 
         self::assertTrue($csv->hasStreamFilter($filtername));
     }
@@ -334,7 +391,7 @@ EOF;
     {
         $path = __DIR__.'/../test_files/foo.csv';
         $csv = Reader::createFromPath($path);
-        $csv->addStreamFilter('string.toupper');
+        $csv->appendStreamFilterOnRead('string.toupper');
 
         self::assertStringContainsString('JOHN', $csv->toString());
 
@@ -346,7 +403,7 @@ EOF;
     public function testSetStreamFilterOnWriter(): void
     {
         $csv = Writer::createFromPath(__DIR__.'/../test_files/newline.csv', 'w+');
-        $csv->addStreamFilter('string.toupper');
+        $csv->appendStreamFilterOnWrite('string.toupper');
         $csv->insertOne([1, 'two', 3, "new\r\nline"]);
 
         self::assertStringContainsString("1,TWO,3,\"NEW\r\nLINE\"", $csv->toString());
@@ -373,6 +430,16 @@ EOF;
         self::assertSame($expected, Writer::createFromFileObject(new SplFileObject($path))->getPathname());
     }
 
+    #[Group('network')]
+    #[DataProvider('getPathnameProviderRemote')]
+    public function testGetPathnameRemote(string $path, string $expected): void
+    {
+        self::assertSame($expected, Reader::createFromPath($path)->getPathname());
+        self::assertSame($expected, Reader::createFromFileObject(new SplFileObject($path))->getPathname());
+        self::assertSame($expected, Writer::createFromFileObject(new SplFileObject($path))->getPathname());
+        self::assertSame($expected, Writer::createFromFileObject(new SplFileObject($path))->getPathname());
+    }
+
     public static function getPathnameProvider(): array
     {
         return [
@@ -384,6 +451,12 @@ EOF;
                 'path' => __DIR__.'/../test_files/foo.csv',
                 'expected' => __DIR__.'/../test_files/foo.csv',
             ],
+        ];
+    }
+
+    public static function getPathnameProviderRemote(): array
+    {
+        return [
             'external uri' => [
                 'path' => 'https://raw.githubusercontent.com/thephpleague/csv/8.2.3/test/data/foo.csv',
                 'expected' => 'https://raw.githubusercontent.com/thephpleague/csv/8.2.3/test/data/foo.csv',
@@ -415,41 +488,33 @@ EOF;
 
     public function testOutputStripBOM(): void
     {
-        if (PHP_VERSION_ID >= 80300) {
-            self::markTestSkipped('Issue with PHPUnit in PHP8.3');
-        }
-
-        $raw_csv = ByteSequence::BOM_UTF8."john,doe,john.doe@example.com\njane,doe,jane.doe@example.com\n";
+        $raw_csv = Bom::Utf8->value."john,doe,john.doe@example.com\njane,doe,jane.doe@example.com\n";
         $csv = Reader::createFromString($raw_csv);
-        $csv->setOutputBOM(ByteSequence::BOM_UTF16_BE);
+        $csv->setOutputBOM(Bom::Utf16Be->value);
 
         ob_start();
-        $csv->output();
+        $csv->download();
         /** @var string $result */
         $result = ob_get_clean();
 
-        self::assertStringNotContainsString(ByteSequence::BOM_UTF8, $result);
-        self::assertTrue(str_starts_with($result, ByteSequence::BOM_UTF16_BE));
+        self::assertStringNotContainsString(Bom::Utf8->value, $result);
+        self::assertTrue(str_starts_with($result, Bom::Utf16Be->value));
     }
 
     public function testOutputDoesNotStripBOM(): void
     {
-        if (PHP_VERSION_ID >= 80300) {
-            self::markTestSkipped('Issue with PHPUnit in PHP8.3');
-        }
-
-        $raw_csv = ByteSequence::BOM_UTF8."john,doe,john.doe@example.com\njane,doe,jane.doe@example.com\n";
+        $raw_csv = Bom::Utf8->value."john,doe,john.doe@example.com\njane,doe,jane.doe@example.com\n";
         $csv = Reader::createFromString($raw_csv);
-        $csv->setOutputBOM(ByteSequence::BOM_UTF16_BE);
+        $csv->setOutputBOM(Bom::Utf16Be->value);
         $csv->includeInputBOM();
 
         ob_start();
-        $csv->output();
+        $csv->download();
         /** @var string $result */
         $result = ob_get_clean();
 
-        self::assertStringContainsString(ByteSequence::BOM_UTF16_BE, $result);
-        self::assertStringContainsString(ByteSequence::BOM_UTF8, $result);
-        self::assertTrue(str_starts_with($result, ByteSequence::BOM_UTF16_BE.ByteSequence::BOM_UTF8));
+        self::assertStringContainsString(Bom::Utf16Be->value, $result);
+        self::assertStringContainsString(Bom::Utf8->value, $result);
+        self::assertTrue(str_starts_with($result, Bom::Utf16Be->value.Bom::Utf8->value));
     }
 }

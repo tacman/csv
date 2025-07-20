@@ -22,11 +22,11 @@ final class MappingFailed extends LogicException implements SerializationFailed
 {
     public static function dueToUnsupportedType(ReflectionProperty|ReflectionParameter $reflectionProperty): self
     {
-        $suffix = 'is missing or is not supported.';
+        $suffix = 'is missing; register it using the `'.Denormalizer::class.'` class.';
 
         return new self(match (true) {
-            $reflectionProperty instanceof ReflectionParameter => 'The type for the method `'.$reflectionProperty->getDeclaringClass()?->getName().'::'.$reflectionProperty->getDeclaringFunction()->getName().'` first argument `'.$reflectionProperty->getName().'` '.$suffix,
-            $reflectionProperty instanceof ReflectionProperty => 'The property type for `'.$reflectionProperty->getDeclaringClass()->getName().'::'.$reflectionProperty->getName().'` '.$suffix,
+            $reflectionProperty instanceof ReflectionParameter => 'The type definition for the method `'.$reflectionProperty->getDeclaringClass()?->getName().'::'.$reflectionProperty->getDeclaringFunction()->getName().'` first argument `'.$reflectionProperty->getName().'` '.$suffix,
+            $reflectionProperty instanceof ReflectionProperty => 'The property type definition for `'.$reflectionProperty->getDeclaringClass()->getName().'::'.$reflectionProperty->getName().'` '.$suffix,
         });
     }
 
@@ -44,18 +44,13 @@ final class MappingFailed extends LogicException implements SerializationFailed
         });
     }
 
-    public static function dueToInvalidCastingArguments(Throwable $exception = null): self
+    public static function dueToInvalidCastingArguments(?Throwable $exception = null): self
     {
         return new self('Unable to load the casting mechanism. Please verify your casting arguments', 0, $exception);
     }
 
     public static function dueToInvalidTypeCastingClass(string $typeCaster): self
     {
-        return new self('`'.$typeCaster.'` must be an resolvable class implementing the `'.TypeCasting::class.'` interface.');
-    }
-
-    public static function dueToForbiddenCastArgument(): self
-    {
-        return new self('The key `reflectionProperty` can not be used with `castArguments`.');
+        return new self('`'.$typeCaster.'` must be an resolvable class implementing the `'.TypeCasting::class.'` interface or a supported alias.');
     }
 }

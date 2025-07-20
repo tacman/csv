@@ -68,36 +68,23 @@ enum Type: string
         };
     }
 
-    public function isScalar(): bool
-    {
-        return match ($this) {
-            self::Bool,
-            self::True,
-            self::False,
-            self::Int,
-            self::Float,
-            self::String => true,
-            default => false,
-        };
-    }
-
     public static function resolve(ReflectionProperty|ReflectionParameter $reflectionProperty, array $arguments = []): TypeCasting
     {
-        $reflectionType = $reflectionProperty->getType() ?? throw MappingFailed::dueToUnsupportedType($reflectionProperty);
-
-        $arguments['reflectionProperty'] = $reflectionProperty;
-
         try {
-            return match (Type::tryFromReflectionType($reflectionType)) {
-                Type::Mixed, Type::Null, Type::String => new CastToString(...$arguments),
-                Type::Iterable, Type::Array => new CastToArray(...$arguments),
-                Type::False, Type::True, Type::Bool => new CastToBool(...$arguments),
-                Type::Float => new CastToFloat(...$arguments),
-                Type::Int => new CastToInt(...$arguments),
-                Type::Date => new CastToDate(...$arguments),
-                Type::Enum => new CastToEnum(...$arguments),
+            $cast = match (self::tryFromAccessor($reflectionProperty)) {
+                self::Mixed, self::Null, self::String => new CastToString($reflectionProperty),
+                self::Iterable, self::Array => new CastToArray($reflectionProperty),
+                self::False, self::True, self::Bool => new CastToBool($reflectionProperty),
+                self::Float => new CastToFloat($reflectionProperty),
+                self::Int => new CastToInt($reflectionProperty),
+                self::Date => new CastToDate($reflectionProperty),
+                self::Enum => new CastToEnum($reflectionProperty),
                 null => throw MappingFailed::dueToUnsupportedType($reflectionProperty),
             };
+
+            $cast->setOptions(...$arguments);
+
+            return $cast;
         } catch (MappingFailed $exception) {
             throw $exception;
         } catch (Throwable $exception) {
@@ -134,15 +121,24 @@ enum Type: string
 
     public static function tryFromName(string $propertyType): ?self
     {
+        $interfaceExists = interface_exists($propertyType);
+
         return match (true) {
-            enum_exists($propertyType) => self::Enum,
+            enum_exists($propertyType),
+            $interfaceExists && (new ReflectionClass($propertyType))->implementsInterface(UnitEnum::class) => self::Enum,
+            $interfaceExists && (new ReflectionClass($propertyType))->implementsInterface(DateTimeInterface::class),
             class_exists($propertyType) && (new ReflectionClass($propertyType))->implementsInterface(DateTimeInterface::class) => self::Date,
             default => self::tryFrom($propertyType),
         };
     }
 
-    public static function tryFromReflectionType(ReflectionType $type): ?self
+    public static function tryFromAccessor(ReflectionProperty|ReflectionParameter $reflectionProperty): ?self
     {
+        $type = $reflectionProperty->getType();
+        if (null === $type) {
+            return Type::Mixed;
+        }
+
         if ($type instanceof ReflectionNamedType) {
             return self::tryFromName($type->getName());
         }

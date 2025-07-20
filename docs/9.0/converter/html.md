@@ -11,7 +11,9 @@ The `HTMLConverter` converts a CSV records collection into an HTML Table using P
 
 Prior to converting your records collection into an HTML table, you may wish to configure optional information to improve your table rendering.
 
-<p class="message-warning">Because we are using the <a href="/9.0/converter/xml/">XMLConverter</a> internally, if an error occurs while validating the submitted values, a <code>DOMException</code> exception will be thrown.</p>
+<p class="message-warning">Before version <code>9.22</code> the class was using the <a href="/9.0/converter/xml/">XMLConverter</a> internally.
+This is no longer the case to take advantage of PHP8.4 new functionalities. If an error occurs while validating the submitted values,
+a <code>DOMException</code> exception will be thrown.</p>
 
 ### HTMLConverter::table
 
@@ -44,6 +46,59 @@ This method sets the optional attribute name for the field name on the HTML `td`
 
 <p class="message-info">If none is used or an empty string is given, the field name information won't be exported to the HTML table.</p>
 
+### HTMLConverter::formatter
+
+<p class="message-info">New feature introduced in version <code>9.20.0</code></p>
+
+```php
+public HTMLConverter::formatter(?callable $formatter): self
+```
+
+This method allows to apply a callback prior to converting your collection individual item.
+This callback allows you to specify how each item will be converted. The formatter should
+return an associative array suitable for conversion.
+
+<p class="message-notice">The <code>Formatter</code> callback does not affect the footer
+and/or header conversion.</p>
+
+### HTMLConverter::when
+
+<p class="message-info">New feature introduced in version <code>9.22.0</code></p>
+
+This method allows to conditionally create your converter depending on the success or
+failure of a condition.
+
+```php
+use League\Csv\HTMLConverter;
+
+$converter = (new HTMLConverter());
+if ($condition) {
+    $converter = $converter->td('data-field');
+} else {
+    $converter = $converter->td('');
+}
+```
+
+becomes
+
+```php
+$converter = (new HTMLConverter())
+    ->when(
+        $condition,
+        fn (HTMLConverter $c) => $c->td('data-field'),
+        fn (HTMLConverter $c) => $c->td(''),
+    );
+)
+```
+
+The `else` expression is not required but if present in **MUST BE** a callable which only
+accepts the `HTMLConverter` instance and returns `null` or a `HTMLConverter` instance.
+
+The only requirements are:
+
+- that the condition is a `boolean` or a callable that returns a `boolean`.
+- the callback returns a `HTMLConverter` instance or null.
+
 ## Conversion
 
 <p class="message-info">Since version <code>9.3.0</code> this method accepts optional header and footer records to display them in the exported HTML table.</p>
@@ -68,7 +123,7 @@ $sth = $dbh->prepare("SELECT firstname, lastname, email FROM users LIMIT 2");
 $sth->setFetchMode(PDO::FETCH_ASSOC);
 $sth->execute();
 
-$converter = (new HTMLConverter())
+$converter = new HTMLConverter()
     ->table('table-csv-data', 'users')
     ->tr('data-record-offset')
     ->td('title')

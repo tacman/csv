@@ -90,7 +90,7 @@ final class StreamTest extends TestCase
         ];
 
         foreach ($expected as $row) {
-            fputcsv($fp, $row);
+            fputcsv($fp, $row, escape: '');
         }
 
         $stream = Stream::createFromPath(
@@ -143,7 +143,7 @@ final class StreamTest extends TestCase
         $this->expectException(UnavailableFeature::class);
 
         $stream = Stream::createFromResource(STDOUT);
-        $stream->fputcsv(['foo', 'bar']);
+        $stream->fputcsv(['foo', 'bar'], escape: '');
         $stream->fseek(-1);
     }
 
@@ -245,7 +245,7 @@ final class StreamWrapper
         }
     }
 
-    public function stream_open(string $path, string $mode, int $options, string &$opened_path = null): bool
+    public function stream_open(string $path, string $mode, int $options, ?string &$opened_path = null): bool
     {
         $options = stream_context_get_options($this->context);
         if (!isset($options[self::PROTOCOL]['stream'])) {
@@ -258,7 +258,7 @@ final class StreamWrapper
     }
 
     /**
-     * @param int<0, max> $count
+     * @param int<1, max> $count
      */
     public function stream_read(int $count): string|false
     {

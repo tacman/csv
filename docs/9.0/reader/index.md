@@ -11,6 +11,7 @@ the `League\Csv\TabularDataReader` interface.
 
 <p class="message-notice">Starting with version <code>9.1.0</code>, <code>createFromPath</code> has its default <code>open_mode</code> parameter set to <code>r</code>.</p>
 <p class="message-notice">Prior to <code>9.1.0</code>, the open mode was <code>r+</code> which looks for write permissions on the file and throws an <code>Exception</code> if the file cannot be opened with the permission set. For sake of clarity, it is strongly suggested to set <code>r</code> mode on the file to ensure it can be opened.</p>
+<p class="message-info">Starting with version <code>9.22.0</code>, the class implements the <code>League\Csv\TabularData</code> interface.</p>
 
 The `Reader` provides a convenient and straight forward API to access and handle CSV. While most
 of its capabilities are explained in the [Tabular Data Reader documentation page](/9.0/reader/tabular-data-reader),
@@ -171,7 +172,7 @@ $res = iterator_to_array($reader, true);
 // ];
 ```
 
-## CSV header
+## Document header
 
 While accessing the CSV header is done via the `getHeader` method which is part of the `TabularDataReader` API,
 Because CSV documents come in difference shape and form the class exposes a way to select and get the document Header
@@ -215,17 +216,17 @@ $header_offset = $csv->getHeaderOffset(); //returns 1000
 $header = $csv->getHeader(); //throws a SyntaxError exception
 ```
 
-Because the csv document is treated as tabular data the header can not contain duplicate entries.
+Because the CSV document is treated as tabular data the header can not contain duplicate entries.
 If the header contains duplicates an exception will be thrown on usage.
 
 ```php
 use League\Csv\Reader;
 
 $csv = Reader::createFromPath('/path/to/file.csv', 'r');
-$csv->fetchOne(0); //returns ['field1', 'field2', 'field1', 'field4']
+$csv->nth(0); //returns ['field1', 'field2', 'field1', 'field4']
 $csv->setHeaderOffset(0); //valid offset but the record contain duplicates
 $header_offset = $csv->getHeaderOffset(); //returns 0
-$header = $csv->getHeader(); //throws a SyntaxError exception
+$records = $csv->getRecords(); //throws a SyntaxError exception
 ```
 
 <p class="message-info">Starting with <code>9.7.0</code> the <code>SyntaxError</code> exception thrown
@@ -236,23 +237,23 @@ use League\Csv\Reader;
 use League\Csv\SyntaxError;
 
 $csv = Reader::createFromPath('/path/to/file.csv', 'r');
-$csv->fetchOne(0); //returns ['field1', 'field2', 'field1', 'field4']
+$csv->nth(0); //returns ['field1', 'field2', 'field1', 'field4']
 $csv->setHeaderOffset(0); //valid offset but the record contain duplicates
 $header_offset = $csv->getHeaderOffset(); //returns 0
 try {
-    $header = $csv->getHeader(); //throws a SyntaxError exception
+    $records = $csv->getRecords(); //throws a SyntaxError exception
 } catch (SyntaxError $exception) {
     $duplicates = $exception->duplicateColumnNames(); //returns ['field1']
 }
 ```
 
-## CSV records
+## Document records
 
-To access the CSV records you will need to use the `getRecords` method. The method returns
-an `Iterator` containing all CSV document records. It will extract the records using the
-[CSV controls characters](/9.0/connections/controls/).
+To access the CSV records you will need to use the `getRecords` or the `getRecordsAsObjects` methods. The methods
+returns an `Iterator` containing all CSV document records as `array` or as objects. It will extract the
+records using the [CSV controls characters](/9.0/connections/controls/).
 
-<p class="message-notice"><code>getRecords</code> is part of the <code>TabularDataReader</code>.</p>
+<p class="message-notice"><code>getRecords</code> and <code>getRecordsAsObjects</code> are part of the <code>TabularDataReader</code> API.</p>
 
 ```php
 use League\Csv\Reader;
@@ -270,10 +271,9 @@ foreach ($records as $offset => $record) {
 }
 ```
 
-### Reader::getRecords with Reader::setHeaderOffset
+### Records selection with Reader::setHeaderOffset
 
-Just like the `getHeader` method, the method output depends on the selection of not of a header
-record using `setHeaderOffset`.
+Just like the `getHeader` method, the method output depends on the header record selected using `setHeaderOffset`.
 
 ```php
 use League\Csv\Reader;
@@ -324,6 +324,10 @@ found records are returned as a [ResultSet](/9.0/reader/resultset) object.
 ## Records conversion
 
 ### Json serialization
+
+<p class="message-info">A dedicated <code>JsonConverter</code> class is added in version <code>9.17.0</code>
+to help <a href="/9.0/converter/json/">converting CSV into proper JSON document</a> without consuming
+too much memory. It is the recommended way to convert to JSON.</p>
 
 The `Reader` class implements the `JsonSerializable` interface. As such you can use the `json_encode`
 function directly on the instantiated object. The interface is implemented using PHP's

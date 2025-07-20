@@ -1,5 +1,7 @@
 <?php
 
+use PhpCsFixer\Runner\Parallel\ParallelConfigFactory;
+
 $header = <<<EOF
 League.Csv (https://csv.thephpleague.com)
 
@@ -16,6 +18,7 @@ $finder = PhpCsFixer\Finder::create()
 $config = new PhpCsFixer\Config();
 
 return $config
+    ->setParallelConfig(ParallelConfigFactory::detect())
     ->setRules([
         '@PSR12' => true,
         'array_syntax' => ['syntax' => 'short'],
@@ -39,6 +42,7 @@ return $config
         'no_superfluous_phpdoc_tags' => true,
         'no_trailing_comma_in_singleline' => true,
         'no_unused_imports' => true,
+        'nullable_type_declaration_for_default_null_value' => true,
         'ordered_imports' => ['imports_order' => ['class', 'function', 'const'], 'sort_algorithm' => 'alpha'],
         'phpdoc_add_missing_param_annotation' => ['only_untyped' => true],
         'phpdoc_align' => ['align' => 'left'],

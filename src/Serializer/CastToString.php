@@ -23,23 +23,36 @@ final class CastToString implements TypeCasting
 {
     private readonly bool $isNullable;
     private readonly Type $type;
+    private ?string $default = null;
+    private readonly TypeCastingInfo $variableName;
 
-    public function __construct(
-        ReflectionProperty|ReflectionParameter $reflectionProperty,
-        private readonly ?string $default = null
-    ) {
+    public function __construct(ReflectionProperty|ReflectionParameter $reflectionProperty)
+    {
         [$this->type, $this->isNullable] = $this->init($reflectionProperty);
+        $this->variableName = TypeCastingInfo::fromAccessor($reflectionProperty);
+    }
+
+    public function info(): TypeCastingInfo
+    {
+        return $this->variableName;
+    }
+
+    public function setOptions(
+        ?string $default = null,
+        bool $emptyStringAsNull = false,
+    ): void {
+        $this->default = $default;
     }
 
     /**
      * @throws TypeCastingFailed
      */
-    public function toVariable(?string $value): ?string
+    public function toVariable(mixed $value): ?string
     {
-        $returnedValue = match(true) {
-            null !== $value => $value,
+        $returnedValue = match (true) {
+            is_string($value) => $value,
             $this->isNullable => $this->default,
-            default => throw TypeCastingFailed::dueToNotNullableType($this->type->value),
+            default => throw TypeCastingFailed::dueToNotNullableType($this->type->value, info: $this->variableName),
         };
 
         return match (true) {
@@ -47,7 +60,7 @@ final class CastToString implements TypeCasting
                 null === $value => 'null',
                 '' === $value => 'empty string',
                 default => $value,
-            }, $this->type->value),
+            }, $this->type->value, info: $this->variableName),
             default => $returnedValue,
         };
     }
@@ -57,6 +70,10 @@ final class CastToString implements TypeCasting
      */
     private function init(ReflectionProperty|ReflectionParameter $reflectionProperty): array
     {
+        if (null === $reflectionProperty->getType()) {
+            return [Type::Mixed, true];
+        }
+
         $type = null;
         $isNullable = false;
         foreach (Type::list($reflectionProperty) as $found) {
@@ -69,9 +86,7 @@ final class CastToString implements TypeCasting
             }
         }
 
-        if (null === $type) {
-            throw throw MappingFailed::dueToTypeCastingUnsupportedType($reflectionProperty, $this, 'string', 'mixed', 'null');
-        }
+        null !== $type || throw throw MappingFailed::dueToTypeCastingUnsupportedType($reflectionProperty, $this, 'string', 'mixed', 'null');
 
         return [$type[0], $isNullable];
     }

@@ -16,7 +16,10 @@ $csv = Reader::createFromPath('/path/to/your/csv/file.csv', 'r');
 $csv->setHeaderOffset(0);
 
 $header = $csv->getHeader(); //returns the CSV header record
-$records = $csv->getRecords(); //returns all the CSV records as an Iterator object
+
+//returns all the records as
+$records = $csv->getRecords(); // an Iterator object containing arrays
+$records = $csv->getRecordsAsObject(MyDTO::class); //an Iterator object containing MyDTO objects
 
 echo $csv->toString(); //returns the CSV document as a string
 ```
@@ -62,7 +65,10 @@ $csv->setDelimiter(';');
 $csv->setHeaderOffset(0);
 
 //build a statement
-$stmt = Statement::create()
+$stmt = new Statement()
+    ->select('firstname', 'lastname', 'email')
+    ->andWhere('firstname', 'starts with', 'A')
+    ->orderByAsc('email')
     ->offset(10)
     ->limit(25);
 
@@ -85,10 +91,10 @@ use League\Csv\XMLConverter;
 $file = new SplFileObject('/path/to/your/csv/file.csv', 'r');
 $csv = Reader::createFromFileObject($file);
 
-$converter = XMLConverter::create()
+$converter = new XMLConverter()
     ->rootElement('csv')
     ->recordElement('record', 'offset')
-    ->fieldElement('field', 'name');
+    ->fieldElement(null);
 
 $dom = $converter->convert($csv);
 $dom->formatOutput = true;
@@ -100,17 +106,17 @@ echo htmlentities($dom->saveXML());
 // <csv>
 //   ...
 //   <record offset="71">
-//     <field name="prenoms">Anaïs</field>
-//     <field name="nombre">137</field>
-//     <field name="sexe">F</field>
-//     <field name="annee">2004</field>
+//     <prenoms>Anaïs</prenoms>
+//     <nombre>137</nombre>
+//     <sexe>F</sexe>
+//     <annee>2004</annee>
 //   </record>
 //   ...
 //   <record offset="1099">
-//     <field name="prenoms">Anaïs</field>
-//     <field name="nombre">124</field>
-//     <field name="sexe">F</field>
-//     <field name="annee">2005</field>
+//     <prenoms>Anaïs</prenoms>
+//     <nombre>124</nombre>
+//     <sexe>F</sexe>
+//     <annee>2005</annee>
 //   </record>
 // </csv>
 ```
@@ -121,14 +127,13 @@ PHP stream filters can directly be used to ease manipulating CSV document
 
 ```php
 use League\Csv\Reader;
+use League\Csv\Bom;
 
 $csv = Reader::createFromPath('/path/to/your/csv/file.csv', 'r');
 $csv->setHeaderOffset(0);
 
-$input_bom = $csv->getInputBOM();
-
-if ($input_bom === Reader::BOM_UTF16_LE || $input_bom === Reader::BOM_UTF16_BE) {
-    $csv->addStreamFilter('convert.iconv.UTF-16/UTF-8');
+if (Bom::tryFromSequence($csv)?->isUtf16() ?? false) {
+    $csv->appendStreamFilterOnRead('convert.iconv.UTF-16/UTF-8');
 }
 
 foreach ($csv as $record) {

@@ -7,28 +7,31 @@ version:
         Connections Settings:
             Overview: '/9.0/connections/'
             Document Loading: '/9.0/connections/instantiation/'
+            Document Output: '/9.0/connections/output/'
             Character Controls: '/9.0/connections/controls/'
-            BOM Sequences: '/9.0/connections/bom/'
             Stream Filters: '/9.0/connections/filters/'
-            Document output: '/9.0/connections/output/'
-        Inserting Records:
-            Writer Connection: '/9.0/writer/'
-            Bundled Helpers: '/9.0/writer/helpers/'
+            BOM Sequence: '/9.0/connections/bom/'
+            Charset Converter: '/9.0/converter/charset/'
         Selecting Records:
-            Tabular Data: '/9.0/reader/tabular-data-reader/'
+            Tabular Data Reader: '/9.0/reader/tabular-data-reader/'
             CSV Reader: '/9.0/reader/'
             Result Set: '/9.0/reader/resultset/'
             Constraint Builders: '/9.0/reader/statement/'
             Record Mapping: '/9.0/reader/record-mapping/'
+        Inserting Records:
+            CSV Writer: '/9.0/writer/'
+            Tabular Data Buffer: '/9.0/writer/buffer/'
+            Bundled Helpers: '/9.0/writer/helpers/'
         Interoperability:
             Overview : '/9.0/interoperability/'
+            Handling Delimiter : '/9.0/interoperability/swap-delimiter/'
+            Formula Injection : '/9.0/interoperability/escape-formula-injection/'
             Document Encoding : '/9.0/interoperability/encoding/'
             RFC4180 Field : '/9.0/interoperability/rfc4180-field/'
             Force Enclosure : '/9.0/interoperability/enclose-field/'
-            Formula Injection : '/9.0/interoperability/escape-formula-injection/'
         Converting Records:
             Overview: '/9.0/converter/'
-            Charset Converter: '/9.0/converter/charset/'
+            JSON Converter: '/9.0/converter/json/'
             XML Converter: '/9.0/converter/xml/'
             HTML Converter: '/9.0/converter/html/'
         Extensions:

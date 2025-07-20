@@ -16,9 +16,12 @@ namespace League\Csv\Serializer;
 use Countable;
 use DateTimeInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
 use Traversable;
+
+use function preg_quote;
 
 final class CastToArrayTest extends TestCase
 {
@@ -27,9 +30,14 @@ final class CastToArrayTest extends TestCase
      * @param array<array-key, int|string> $expected
      */
     #[DataProvider('providesValidStringForArray')]
-    public function testItCanConvertToArraygWithoutArguments(string $shape, string $type, string $input, array $expected): void
+    public function testItCanConvertToArraygWithoutArguments(string $shape, string $type, string|array $input, array $expected): void
     {
-        self::assertSame($expected, (new CastToArray(reflectionProperty: new ReflectionProperty(ArrayClass::class, 'nullableIterable'), shape:$shape, type:$type))->toVariable($input));
+        $cast = new CastToArray(new ReflectionProperty((new class () {
+            public ?iterable $nullableIterable;
+        })::class, 'nullableIterable'));
+        $cast->setOptions(shape:$shape, type:$type);
+
+        self::assertSame($expected, $cast->toVariable($input));
     }
 
     public static function providesValidStringForArray(): iterable
@@ -80,13 +88,20 @@ final class CastToArrayTest extends TestCase
             'shape' => 'csv',
             'type' => 'string',
             'input' => '"1",2,3,"4"',
-            'expected' => ['1', '2', '3', '4'],
+            'expected' => [['1', '2', '3', '4']],
         ];
 
         yield 'using the csv shape with type int' => [
             'shape' => 'csv',
             'type' => 'int',
             'input' => '"1",2,3,"4"',
+            'expected' => [[1, 2, 3, 4]],
+        ];
+
+        yield 'using an array overrides every other settings' => [
+            'shape' => 'csv',
+            'type' => 'int',
+            'input' => [1, 2, 3, 4],
             'expected' => [1, 2, 3, 4],
         ];
     }
@@ -95,24 +110,35 @@ final class CastToArrayTest extends TestCase
     {
         $this->expectException(MappingFailed::class);
 
-        new CastToArray(new ReflectionProperty(ArrayClass::class, 'nullableInt'));
+        new CastToArray(new ReflectionProperty((new class () {
+            public ?int $nullableInt;
+        })::class, 'nullableInt'));
     }
 
     public function testItFailsToCastInvalidJson(): void
     {
-        $this->expectException(TypeCastingFailed::class);
+        $object = new class () {
+            public ?iterable $nullableIterable;
+        };
 
-        (new CastToArray(new ReflectionProperty(ArrayClass::class, 'nullableIterable'), null, 'json'))->toVariable('{"json":toto}');
+        $this->expectException(TypeCastingFailed::class);
+        $this->expectExceptionMessageMatches('/Casting the property `'.preg_quote($object::class, '/').'::nullableIterable` using the record field `nullableIterable` failed;/');
+
+        $cast = new CastToArray(new ReflectionProperty($object::class, 'nullableIterable'));
+        $cast->setOptions(shape: 'json');
+        $cast->toVariable('{"json":toto}');
     }
 
     public function testItCastNullableJsonUsingTheDefaultValue(): void
     {
         $defaultValue = ['toto'];
 
-        self::assertSame(
-            $defaultValue,
-            (new CastToArray(new ReflectionProperty(ArrayClass::class, 'nullableIterable'), $defaultValue, 'json'))->toVariable(null)
-        );
+        $cast = new CastToArray(new ReflectionProperty((new class () {
+            public ?iterable $nullableIterable;
+        })::class, 'nullableIterable'));
+        $cast->setOptions(default: $defaultValue, shape: 'json');
+
+        self::assertSame($defaultValue, $cast->toVariable(null));
     }
 
     #[DataProvider('invalidPropertyName')]
@@ -120,7 +146,15 @@ final class CastToArrayTest extends TestCase
     {
         $this->expectException(MappingFailed::class);
 
-        $reflectionProperty = new ReflectionProperty(ArrayClass::class, $propertyName);
+        $class = new class () {
+            public ?int $nullableInt;
+            public array $array;
+            public DateTimeInterface|array|null $unionType;
+            public DateTimeInterface|string $invalidUnionType;
+            public Countable&Traversable $intersectionType;
+        };
+
+        $reflectionProperty = new ReflectionProperty($class::class, $propertyName);
 
         new CastToArray($reflectionProperty);
     }
@@ -133,14 +167,21 @@ final class CastToArrayTest extends TestCase
             'intersection type not supported' => ['propertyName' => 'intersectionType'],
         ];
     }
-}
 
-class ArrayClass
-{
-    public ?iterable $nullableIterable;
-    public ?int $nullableInt;
-    public array $array;
-    public DateTimeInterface|array|null $unionType;
-    public DateTimeInterface|string $invalidUnionType;
-    public Countable&Traversable $intersectionType;
+    #[Test]
+    public function it_can_trim_array_value_if_applicable(): void
+    {
+        $cast = new CastToArray(new ReflectionProperty((new class () {
+            public ?iterable $nullableIterable;
+        })::class, 'nullableIterable'));
+        $cast->setOptions(shape: 'list', trimElementValueBeforeCasting: true);
+
+        $string = 'john , john, foo';
+
+        self::assertSame(['john', 'john', 'foo'], $cast->toVariable($string));
+
+        $cast->setOptions(shape: 'list');
+
+        self::assertSame(['john ', ' john', ' foo'], $cast->toVariable($string));
+    }
 }

@@ -7,40 +7,85 @@ title: BOM sequence detection and addition
 
 ## Detecting the BOM sequence
 
-To improve interoperability with programs interacting with CSV, the package now provides an interface `ByteSequence` to help you detect the appropriate <abbr title="Byte Order Mark">BOM</abbr> sequence.
+To improve interoperability with programs interacting with CSV, the package now provides an enum `Bom` to help you detect the appropriate <abbr title="Byte Order Mark">BOM</abbr> sequence.
 
-### Constants
+### BOM definition
 
-The `ByteSequence` interface provides the following constants :
+The `Bom` enum provides the following value :
 
-- `ByteSequence::BOM_UTF8` : contains `UTF-8` `BOM` sequence;
-- `ByteSequence::BOM_UTF16_BE` : contains `UTF-16` `BOM` with Big-Endian sequence;
-- `ByteSequence::BOM_UTF16_LE` : contains `UTF-16` `BOM` with Little-Endian sequence;
-- `ByteSequence::BOM_UTF32_BE` : contains `UTF-32` `BOM` with Big-Endian sequence;
-- `ByteSequence::BOM_UTF32_LE` : contains `UTF-32` `BOM` with Little-Endian sequence;
+- `Bom::Utf8` : which handles the `UTF-8` `BOM` sequence;
+- `Bom::utf16Be` : which handles the `UTF-16` `BOM` with Big-Endian sequence;
+- `Bom::utf16Le` : which handles the `UTF-16` `BOM` with Little-Endian sequence;
+- `Bom::utf32Be` : which handles the `UTF-32` `BOM` with Big-Endian sequence;
+- `Bom::utf32Le` : which handles the `UTF-32` `BOM` with Little-Endian sequence;
 
-### Info::fetchBOMSequence
-
-```php
-function League\Csv\Info::fetchBOMSequence(string $str): ?string
-```
-
-The `Info::fetchBOMSequence` static method expects a string and returns the BOM sequence found at its start or null otherwise.
+### Detecting the BOM from a sequence of characters
 
 ```php
-use League\Csv\Info;
-
-Info::fetchBOMSequence('hello world!'); //returns null
-Info::fetchBOMSequence(Info::BOM_UTF8.'hello world!'); //returns '\xEF\xBB\xBF'
-Info::fetchBOMSequence('hello world!'.Info::BOM_UTF16_BE); //returns null
+Bom::fromSequence(mixed $sequence): Bom
+Bom::tryFromSequence(mixed $sequence): ?Bom
 ```
 
-### bom_match
+The `Bom::tryFromSequence` static method expects any type that can be converted to a string and returns the BOM sequence found at its start as a new `Bom` instance or null otherwise.
+Instead of returning `null` the `Bom::fromSequence` will throw a `ValueError` exception.
 
-<p class="message-warning">Since version <code>9.7</code> this function is deprecated and you are encouraged to use <code>Info::fetchBOMSequence</code> instead.</p>
+```php
+use League\Csv\Bom;
+
+Bom::tryFromSequence('hello world!'); //returns null
+Bom::tryFromSequence(Bom::Utf8->value.'hello world!'); //returns Bom::Utf8
+Bom::tryFromSequence('hello world!'.Bom::Utf16Le->value); //returns null
+```
+
+### Detecting the BOM from the encoding name
+
+```php
+Bom::fromEncoding(string $encoding): Bom
+Bom::tryFromEncoding(mixed $encoding): ?Bom
+```
+
+The `Bom::tryFromEncoding` static method expects a valid encoding name as a string if the encoding name after filtering is find a new `Bom` instance or `null` is returned otherwise.
+Instead of returning `null` the `Bom::fromEncoding` will throw a `ValueError` exception.
+
+```php
+use League\Csv\Bom;
+
+Bom::tryFromEncoding('utf16'); //returns Bom::Utf16Be
+Bom::tryFromEncoding('u_t_F--8'); //returns Bom::Utf8
+Bom::tryFromEncoding('foobar'); //returns null
+```
+
+### Accessing the BOM properties
+
+Once you have a valid `Bom` instance you can access:
+
+- its actual value via the Enum `value` property;
+- its length via the `length()` method;
+- the represented encoding name via the `encoding()` method;
+- `isUtf8`, `isUtf16`, `isUtf32` method to quicky know which encoding family is used
+
+```php
+use League\Csv\Bom;
+
+$bom = Bom::tryFromEncoding('utf16'); //returns Bom::Utf16Be
+$bom->value; //returns "\xFE\xFF"
+$bom->length(); //returns 2
+$bom->encoding(); //returns 'UTF-16BE'
+$bom->isUtf8(); //returns false
+$bom->isUtf16(); //returns true
+$bom->isUtf32(); //returns false
+```
+
+## Deprecated features
+
+### bom_match and Info::fetchBOMSequence
+
+<p class="message-warning">Since version <code>9.7</code> <code>bom_match</code> is deprecated and you are encouraged to use <code>Info::fetchBOMSequence</code> instead.</p>
+<p class="message-warning">Since version <code>9.16</code> <code>Info::fetchBOMSequence</code> is deprecated and you are encouraged to use <code>Bom::tryFromSequence</code> instead.</p>
 
 ```php
 function League\Csv\bom_match(string $str): string
+League\Csv\Info::fetchBOMSequence(string $str): ?string
 ```
 
 The `League\Csv\bom_match` function expects a string and returns the BOM sequence found at its start or an empty string otherwise.
@@ -62,7 +107,7 @@ bom_match('hello world!'.ByteSequence::BOM_UTF16_BE); //returns ''
 public AbstractCsv::getInputBOM(void): string
 ```
 
-The CSV document current BOM character is detected using the `getInputBOM` method. This method returns the currently used BOM character or an empty string if none is found or recognized. The detection is done using the `Info::fetchBOMSequence` static method.
+The CSV document current BOM character is detected using the `getInputBOM` method. This method returns the currently used BOM character or an empty string if none is found or recognized. The detection is done using the `Bom::tryFromSequence` static method.
 
 ```php
 use League\Csv\Reader;
@@ -74,7 +119,7 @@ $bom = $csv->getInputBOM();
 ### Setting the outputted BOM sequence
 
 ```php
-public AbstractCsv::setOutputBOM(string $sequence): self
+public AbstractCsv::setOutputBOM(Bom|string|null $sequence): self
 public AbstractCsv::getOutputBOM(void): string
 ```
 
@@ -82,12 +127,14 @@ public AbstractCsv::getOutputBOM(void): string
 - `getOutputBOM`: gets the outputting BOM you want your CSV to be associated with.
 
 <p class="message-info">All connections classes implement the <code>ByteSequence</code> interface.</p>
+<p class="message-notice">Since version <code>9.16</code> the <code>$sequence</code> parameter also accepts a <code>Bom</code> instance or <code>null</code>.</p>
 
 ```php
+use League\Csv\Bom;
 use League\Csv\Reader;
 
 $csv = Reader::createFromPath('/path/to/file.csv', 'r');
-$csv->setOutputBOM(ByteSequence::BOM_UTF8);
+$csv->setOutputBOM(Bom::Utf8);
 $bom = $csv->getOutputBOM(); //returns "\xEF\xBB\xBF"
 ```
 
@@ -110,14 +157,14 @@ AbstractCsv::isInputBOMIncluded(): bool;
 - `includeInputBOM`: preserves the input BOM from your CSV document while accessing its content.
 - `isInputBOMIncluded`: tells whether skipping or including the input BOM will be done.
 
-<p class="message-notice">By default and to avoid BC Break, the Input BOM, if present, is skipped.</p>
+<p class="message-notice">By default, and to avoid BC Break, the Input BOM, if present, is skipped.</p>
 
 If your document does not contain any BOM sequence you can speed up the CSV iterator by preserving its presence, which means that no operation to detect and remove it if present will take place.
 
 ```php
-$raw_csv = Reader::BOM_UTF8."john,doe,john.doe@example.com\njane,doe,jane.doe@example.com\n";
+$raw_csv = Bom::Utf8->value."john,doe,john.doe@example.com\njane,doe,jane.doe@example.com\n";
 $csv = Reader::createFromString($raw_csv);
-$csv->setOutputBOM(Reader::BOM_UTF16_BE);
+$csv->setOutputBOM(Bom::Utf16Le);
 $csv->includeInputBOM();
 ob_start();
 $csv->output();

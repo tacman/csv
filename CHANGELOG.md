@@ -2,7 +2,361 @@
 
 All Notable changes to `Csv` will be documented in this file
 
-## [Next] - TBD
+## [9.24.1](https://github.com/thephpleague/csv/compare/9.24.0...9.24.1) - 2025-06-25
+
+### Added
+
+- None
+
+### Deprecated
+
+- None
+
+### Fixed
+
+- Fix possible memory leaks with the `Writer` class [#563](https://github.com/thephpleague/csv/issues/563) - thanks to [pope-12](https://github.com/pope-12)
+
+### Remove
+
+- None
+
+## [9.24.0](https://github.com/thephpleague/csv/compare/9.23.0...9.24.0) - 2025-06-24
+
+### Added
+
+- `TabularData::last` and `TabularData::lastAsObject`
+
+### Deprecated
+
+- None
+
+### Fixed
+
+- Improved implementation for `AbstractCsv::download` method
+
+### Remove
+
+- None
+
+## [9.23.0](https://github.com/thephpleague/csv/compare/9.22.0...9.23.0) - 2025-03-28
+
+### Added
+
+- `TypeCastingInfo` to improve the error message when type casting fails during denormalization [#561](https://github.com/thephpleague/csv/pull/561)
+
+### Deprecated
+
+- `fetchColumnByOffset` and `fetchColumnByName` use `fetchColumn` instead.
+
+### Fixed
+
+- Test suite around header testing using Xdebug functions [#559](https://github.com/thephpleague/csv/pull/559)
+
+### Remove
+
+- None
+
+## [9.22.0](https://github.com/thephpleague/csv/compare/9.21.0...9.22.0) - 2025-02-28
+
+### Added
+
+- `Writer::necessaryEnclosure`
+- `TabularDataReader::selectAllExcept`
+- `Statement::selectAllExcept`
+- `ResultSet::from` and `ResultSet::tryFrom`
+- `RdbmsResult` class to ease importing RDBMS result into the package classes
+- `TabularData` interface
+- `Buffer` class
+- `XMLConverter::supportsHeader`
+- `XMLConverter::when`
+- `HTMLConverter::when`
+- `JsonConverter::when`
+- `CharsetConverter::appendOnReadTo`, `CharsetConverter::appendOnWriteTo`, `CharsetConverter::prependOnReadTo`, `CharsetConverter::prependOnWriteTo`
+
+### Deprecated
+
+- `Writer::relaxEnclosure` use `Writer::necessaryEnclosure`
+- `ResultSet::createFromTabularDataReader` use `ResultSet::from`
+- `ResultSet::createFromRecords` use `ResultSet::from`
+- `ResultSet::__construct` is marked as being `internal` and deprecated before being made private use `ResultSet::from`
+- `XMLConverter::convert` use `XMLConverter::import` instead
+- `XMLConverter::create` use `XMLConverter::__construct` instead
+- `HTMLConverter::create` use `HTMLConverter::__construct` instead
+- `Statement::create` use `Statement::__construct` instead
+- `FragmentFinder::create` use `FragmentFinder::__construct` instead
+- `CharsetConverter::appendTo`, `CharsetConverter::prependTo` use the more strict methods added on the instance
+
+### Fixed
+
+- `Comparison::CONTAINS` must check the value is a string before calling `str_compare` [#548](https://github.com/thephpleague/csv/pull/548) by [cage-is](https://github.com/cage-is)
+- Fix testing to improve Debian integration [#549](https://github.com/thephpleague/csv/pull/549) by [David Prévot and tenzap](https://github.com/tenzap)
+- `Bom::tryFromSequence` and `Bom::fromSequence` supports the `Reader` and `Writer` classes.
+- `XMLConverter::$formatter` should not be public.
+- `XMLConverter` internal rewritten to take advantage of PHP8.4 new dom classes
+- `HTMLConverter` internal rewritten to take advantage of PHP8.4 new dom classes
+- `XMLConverter::fieldElement` now has a `nullable` field element to allow using headers names as cell names.
+
+### Removed
+
+- None
+
+## [9.21.0](https://github.com/thephpleague/csv/compare/9.20.1...9.21.0) - 2025-01-08
+
+### Added
+
+- `TabularDataReader::map` method.
+- `StreamFilter` class
+- `CallbackStreamFilter` class
+- `AbstractCsv::appendStreamFilterOnRead`
+- `AbstractCsv::appendStreamFilterOnWrite`
+- `AbstractCsv::prependStreamFilterOnRead`
+- `AbstractCsv::prependStreamFilterOnWrite`
+- `Stream::getMode` returns the underlying stream mode; internal codebase.
+
+### Deprecated
+
+- `AbstractCsv::addStreamFilter` use `AbstractCsv::appendStreamFilterOnRead` or `AbstractCsv::appendStreamFilterOnWrite` instead.
+
+### Fixed
+
+- Improve `CharsetConverter` and `SwapDelimiter` internal code.
+- Fix `supportStreamFilterOnRead`and `supportStreamFilterOnWrite` to expose the document real stream filter capabilities.
+
+### Removed
+
+- None
+
+## [9.20.1](https://github.com/thephpleague/csv/compare/9.20.0...9.20.1) - 2024-12-18
+
+### Added
+
+- None
+
+### Deprecated
+
+- None
+
+### Fixed
+
+- [#554](https://github.com/thephpleague/csv/pull/544) Fix stream filte removal by [crocodele](https://github.com/crocodele)
+- Fix Statement callback and closure signature
+
+### Removed
+
+- None
+
+## [9.20.0](https://github.com/thephpleague/csv/compare/9.19.0...9.20.0) - 2024-12-13
+
+### Added
+
+- `XMLConverter::formatter`
+- `HTMLConverter::formatter`
+- `Writer::encloseNone`
+- `Writer::encloseNecessary`
+- `Writer::noEnclosure`
+
+### Deprecated
+
+- None
+
+### Fixed
+
+- `JsonConverter::formatter` now accepts callable before only `Closure` where accepted.
+- The protected property `Writer::$enclose_all` is no longer a boolean but an integer
+
+### Removed
+
+- None
+
+## [9.19.0](https://github.com/thephpleague/csv/compare/9.18.0...9.19.0) - 2024-12-08
+
+### Added
+
+- `JsonConverter::withPrettyPrint` now accepts an optional `$identSize` parameter as its unique parameter.
+- `Statement::when` to enable conditionable query building.
+- Using PHP8.4 `Deprecated` attribute to signal deprecated public API methods and constants.
+
+### Deprecated
+
+- `JsonConverter::indentSize`
+
+### Fixed
+
+- Adding forgotten support for `callable` in the `Query\Constraint` namespace.
+- Fix `HttpHeaders::forFileDownload` to be inline with RFC2183 and HTTP field name and value best practices.
+
+### Remove
+
+- None
+
+## [9.18.0](https://github.com/thephpleague/csv/compare/9.17.0...9.18.0) - 2024-10-18
+
+### Added
+
+- `League\Csv\JsonConverter::chunkSize`
+- `League\Csv\AbstractCsv::download`
+
+### Deprecated
+
+- `League\Csv\AbstractCsv::output` use `League\Csv\AbstractCsv::download` instead
+- `League\Csv\FragmentFinder` and derived methods are marked as **experimental** as their results will be changed in the next major version.
+
+### Fixed
+
+- `League\Csv\JsonConverter::download` the filename is now nullable
+- `League\Csv\XMLConverter::download` the filename is now nullable
+- `League\Csv\JsonConverter::save` throws a `TypeError` exception if the `$destination` type is not supported.
+
+### Remove
+
+- None
+
+## [9.17.0](https://github.com/thephpleague/csv/compare/9.16.0...9.17.0) - 2024-10-10
+
+### Added
+
+- `League\Csv\SwapDelimiter::apppendTo`
+- `League\Csv\SwapDelimiter::prependTo`
+- `League\Csv\CharsetConverter::apppendTo`
+- `League\Csv\CharsetConverter::prependTo`
+- `League\Csv\XMLConverter::download`
+- `League\Csv\JsonConverter`
+- `League\Csv\Constraint\Criteria::andNot`
+- `League\Csv\Constraint\Criteria::orNot`
+- `League\Csv\Constraint\Criteria::xorNot`
+- `League\Csv\Serializer\MapRecord` attribute
+- adding the `convertEmptyStringToNull` options to `MapCell` and to `MapRecord` to improve string and `null` conversion
+- adding the `trimFieldValueBeforeCasting` options to `MapCell` and to `MapRecord` to improve string conversion
+- adding the `trimElementValueBeforeCasting` option to `CasToArray` to improve conversion during denormalization
+- adding the `headerOffset` option to `CasToArray` to improve conversion during denormalization. The optoon is only used with the CSV shape.
+
+### Deprecated
+
+- None
+
+### Fixed
+
+- `Cast*` methods accept more input type to improve Denormalization usage when `Reader::addFormatter` is used or when the collection contains data other than string and `null`.
+- `Stream::getSize` is added to the internal `Stream` class
+- `Stream::getContents` is added to the internal `Stream` class
+- `MapIterator::toIterator` is added to the internal class `MapIterator` class to convert any `iterable` into an `Iterator`.
+- Casting a CSV to an `array` it now will be a collection of array instead of a simple `array`.
+- Added the internal class `HttpHeaders` to improve file download throughout the codebase.
+
+### Removed
+
+- `leage\csv-doctrine` is no longer a sub-split of the main `league/csv` package.
+
+## [9.16.0](https://github.com/thephpleague/csv/compare/9.15.0...9.16.0) - 2024-05-24
+
+### Added
+
+- `Bom` enum
+- `Stream::ftell`
+- `Statement::orderByAsc`
+- `Statement::orderByDesc`
+- `Statement::andWhere`
+- `Statement::whereNot`
+- `Statement::orWhere`
+- `Statement::xorWhere`
+- `Statement::andWhereColumn`
+- `Statement::whereNotColumn`
+- `Statement::orWhereColumn`
+- `Statement::xorWhereColumn`
+- `Statement::andWhereOffset`
+- `Statement::whereNotOffset`
+- `Statement::orWhereOffset`
+- `Statement::xorWhereOffset`
+- `Query` feature to allow easier filtering, ordering and querying tabular data
+
+### Deprecated
+
+- `ByteSequence` Interface use the `Bom` enum instead
+- `Info::fetchBOMSequence` use `Bom::tryFromSequence` instead
+- `League\Csv\Doctrine` use the new `League\Csv\Constraint` feature instead
+- `League\Csv\Statement::create` arguments; The method should be used without any argument at all. All arguments will be removed in the next major version.
+
+### Fixed
+
+- `Reader` and `ResultSet` docblocks
+- internal code uses `Bom` enum instead of `Info::fetchBOMSequence`
+- the `AbstractCsv` BOM related properties are moved to being `Bom` instances instead of nullable string.
+- `setOutpuBOM` will only accept valid BOM sequences all other values except the empty string will throw a `ValueError` exception;
+- The package no longer requires the `ext-mbstring` extension to work. But you should have it install in your system in order to use the `mbstring` related stream filters.
+- Issue [#524](https://github.com/thephpleague/csv/issues/524) fix issue with `ResultSet::chunkBy` not working as documented.
+
+### Removed
+
+- None
+
+## [9.15.0](https://github.com/thephpleague/csv/compare/9.14.0...9.15.0) - 2023-02-20
+
+### Added
+
+- `Statement::select`
+- `TabularDataReader::getRecordsAsObject`
+- `TabularDataReader::chunkBy`
+- `TabularDataReader::mapHeader`
+
+### Deprecated
+
+- `TabularDataReader::getObjects` use `TabularDataReader::getRecordsAsObject` instead
+
+### Fixed
+
+- `Reader::select` and `ResultSet::select` now internally use `Statement::select`
+- `Statement` should not throw when `LimitIterator` is used in combinaison with `ArrayIterator`.
+- `Statement` internal codebase improvement.
+- Using the `$header` argument on `Statement::process` is no longer deprecated. `E_USER_DEPRECATED` is no longer triggered.
+- BOM stripping no longer depends on the `mbstring` extension
+- `TabularDataReader::fetchColumn` is no longer deprecated
+
+### Removed
+
+- None
+
+## [9.14.0](https://github.com/thephpleague/csv/compare/9.13.0...9.14.0) - 2023-12-29
+
+### Added
+
+- `League\Csv\TabularDataReader::nthAsObject` equivalent to `nth` but returns an object or `null`
+- `League\Csv\TabularDataReader::firstAsObject` equivalent to `first` but returns an object or null
+- `League\Csv\Serializer\Denormalizer::types` list all the registered types
+
+### Deprecated
+
+- None
+
+### Fixed
+
+- None
+
+### Removed
+
+- None
+
+## [9.13.0](https://github.com/thephpleague/csv/compare/9.12.0...9.13.0) - 2023-12-16
+
+### Added
+
+- `League\Csv\SwapDelimiter` stream filter to allow working with multibyte CSV delimiter
+- `League\Csv\Serializer\AfterMapping` to work around the limitation of not using the class constructor during denormalization.
+- `League\Csv\Serializer\Denormalizer` to allow registering type alias to improve callback usage.
+- `League\Csv\Serializer\MapCell` has a new property `ignore` to allow ignoring a property or a method during denormalization.
+
+### Deprecated
+
+- None
+
+### Fixed
+
+- None
+
+### Removed
+
+- None
+
+## [9.12.0](https://github.com/thephpleague/csv/compare/9.11.0...9.12.0) - 2023-12-02
 
 ### Added
 
@@ -15,7 +369,7 @@ All Notable changes to `Csv` will be documented in this file
 - `ResultSet::fromRecords`
 - `Stream::setMaxLineLen`
 - `Stream::getMaxLineLen`
-- `League\Csv\Serializer\Denormalizer` to allow casting records to objects [#508](https://github.com/thephpleague/csv/issues/508)
+- `League\Csv\Serializer\Denormalizer` to allow denormalizing records into objects [#508](https://github.com/thephpleague/csv/issues/508)
 - `League\Csv\FragmentFinder` to implement [RFC7111](https://www.rfc-editor.org/rfc/rfc7111)
 
 ### Deprecated
@@ -26,10 +380,10 @@ It's usage will trigger a `E_USER_DEPRECATED` call.
 
 ### Fixed
 
-- The optional `$header` argument for `TabularDataReader;;getRecords` becomes a full mapper between the records column offset and the column names [#498](https://github.com/thephpleague/csv/issues/498)
+- The optional `$header` argument for `TabularDataReader::getRecords` becomes a full mapper between the records column offset and the column names [#498](https://github.com/thephpleague/csv/issues/498)
 - `ResultSet` constructor now allows the records to be an `array`.
-- The internal `Stream` object it will throw a `RuntimeException` if the rewind action fails
-- if calls to `fseek` fails (returns `-1` ) a new `RuntimeException` will be thrown too.
+- The internal `Stream` object will throw a `RuntimeException` if the rewind action fails
+- if calls to `fseek` fails (returns `-1` ) a `RuntimeException` will be thrown.
 - `Stream` can iterate and return the full line respecting `SplFielObject` flags. Previously it only returned the CSV records.
 - `MapIterator::fromIterable` to instantiate a `MapIterator` object from any iterable structure.
 
@@ -1380,7 +1734,7 @@ to manage BOM character with CSV.
 
 Initial Release of `Bakame\Csv`
 
-[Next]: https://github.com/thephpleague/csv/compare/9.11.0...master
+[Next]: https://github.com/thephpleague/csv/compare/9.12.0...master
 [9.10.0]: https://github.com/thephpleague/csv/compare/9.9.0...9.10.0
 [9.9.0]: https://github.com/thephpleague/csv/compare/9.8.0...9.9.0
 [9.8.0]: https://github.com/thephpleague/csv/compare/9.7.4...9.8.0

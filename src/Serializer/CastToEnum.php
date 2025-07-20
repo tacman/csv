@@ -15,7 +15,6 @@ namespace League\Csv\Serializer;
 
 use BackedEnum;
 use ReflectionEnum;
-use ReflectionNamedType;
 use ReflectionParameter;
 use ReflectionProperty;
 use Throwable;
@@ -26,32 +25,41 @@ use UnitEnum;
  */
 class CastToEnum implements TypeCasting
 {
-    /** @var class-string<UnitEnum|BackedEnum> */
-    private readonly string $class;
     private readonly bool $isNullable;
-    private readonly BackedEnum|UnitEnum|null $default;
+    private readonly Type $type;
+    private ?UnitEnum $default = null;
+    private readonly TypeCastingInfo $info;
+    /** @var class-string<UnitEnum|BackedEnum> */
+    private string $class;
 
     /**
-     * @param ?class-string<UnitEnum|BackedEnum> $enum
+     * @throws MappingFailed
+     */
+    public function __construct(ReflectionProperty|ReflectionParameter $reflectionProperty)
+    {
+        [$this->type, $this->class, $this->isNullable] = $this->init($reflectionProperty);
+        $this->info = TypeCastingInfo::fromAccessor($reflectionProperty);
+    }
+
+    public function info(): TypeCastingInfo
+    {
+        return $this->info;
+    }
+
+    /**
+     * @param ?class-string<UnitEnum|BackedEnum> $className *
      *
      * @throws MappingFailed
      */
-    public function __construct(
-        ReflectionProperty|ReflectionParameter $reflectionProperty,
+    public function setOptions(
         ?string $default = null,
-        ?string $enum = null,
-    ) {
-        [$type, $reflection, $this->isNullable] = $this->init($reflectionProperty);
-        /** @var class-string<UnitEnum|BackedEnum> $class */
-        $class = $reflection->getName();
-        if (Type::Mixed->equals($type)) {
-            if (null === $enum || !enum_exists($enum)) {
-                throw new MappingFailed('`'.$reflectionProperty->getName().'` type is `mixed`; you must specify the Enum class via the `$enum` argument.');
-            }
-            $class = $enum;
+        ?string $className = null,
+        bool $emptyStringAsNull = false,
+    ): void {
+        if (Type::Mixed->equals($this->type) || in_array($this->class, [BackedEnum::class , UnitEnum::class], true)) {
+            (null !== $className && enum_exists($className)) || throw new MappingFailed('`'.$this->info->targetName.'` type is `'.($this->class ?? 'mixed').'` but the specified class via the `$className` argument is invalid or could not be found.');
+            $this->class = $className;
         }
-
-        $this->class = $class;
 
         try {
             $this->default = (null !== $default) ? $this->cast($default) : $default;
@@ -63,39 +71,49 @@ class CastToEnum implements TypeCasting
     /**
      * @throws TypeCastingFailed
      */
-    public function toVariable(?string $value): BackedEnum|UnitEnum|null
+    public function toVariable(mixed $value): BackedEnum|UnitEnum|null
     {
         return match (true) {
             null !== $value => $this->cast($value),
             $this->isNullable => $this->default,
-            default => throw TypeCastingFailed::dueToNotNullableType($this->class),
+            default => throw TypeCastingFailed::dueToNotNullableType($this->class, info: $this->info),
         };
     }
 
     /**
      * @throws TypeCastingFailed
      */
-    private function cast(string $value): BackedEnum|UnitEnum
+    private function cast(mixed $value): BackedEnum|UnitEnum
     {
+        if ($value instanceof $this->class) {
+            return $value;
+        }
+
+        is_string($value) || throw throw TypeCastingFailed::dueToInvalidValue($value, $this->class, info: $this->info);
+
         try {
             $enum = new ReflectionEnum($this->class);
             if (!$enum->isBacked()) {
                 return $enum->getCase($value)->getValue();
             }
 
-            $backedValue = 'int' === $enum->getBackingType()?->getName() ? filter_var($value, Type::Int->filterFlag()) : $value;
+            $backedValue = 'int' === $enum->getBackingType()->getName() ? filter_var($value, Type::Int->filterFlag()) : $value;
 
             return $this->class::from($backedValue); /* @phpstan-ignore-line */
         } catch (Throwable $exception) {
-            throw throw TypeCastingFailed::dueToInvalidValue($value, $this->class, $exception);
+            throw throw TypeCastingFailed::dueToInvalidValue($value, $this->class, $exception, $this->info);
         }
     }
 
     /**
-     * @return array{0:Type, 1:ReflectionNamedType, 2:bool}
+     * @return array{0:Type, 1:class-string<UnitEnum|BackedEnum>, 2:bool}
      */
     private function init(ReflectionProperty|ReflectionParameter $reflectionProperty): array
     {
+        if (null === $reflectionProperty->getType()) {
+            return [Type::Mixed, UnitEnum::class, true];
+        }
+
         $type = null;
         $isNullable = false;
         foreach (Type::list($reflectionProperty) as $found) {
@@ -108,10 +126,11 @@ class CastToEnum implements TypeCasting
             }
         }
 
-        if (null === $type) {
-            throw throw MappingFailed::dueToTypeCastingUnsupportedType($reflectionProperty, $this, 'enum', 'mixed');
-        }
+        null !== $type || throw throw MappingFailed::dueToTypeCastingUnsupportedType($reflectionProperty, $this, 'enum', 'mixed');
 
-        return [...$type, $isNullable];
+        /** @var class-string<UnitEnum|BackedEnum> $className */
+        $className = $type[1]->getName();
+
+        return [$type[0], $className, $isNullable];
     }
 }

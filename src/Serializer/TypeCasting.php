@@ -15,6 +15,8 @@ namespace League\Csv\Serializer;
 
 /**
  * @template TValue
+ *
+ * @method TypeCastingInfo info() the name of the property the value will be assigned to
  */
 interface TypeCasting
 {
@@ -23,5 +25,14 @@ interface TypeCasting
      *
      * @return TValue
      */
-    public function toVariable(?string $value): mixed;
+    public function toVariable(mixed $value): mixed;
+
+    /**
+     * Accepts additional parameters to configure the class
+     * Parameters should be scalar value, null or array containing
+     * only scalar value and null.
+     *
+     * @throws MappingFailed
+     */
+    public function setOptions(): void;
 }

@@ -13,26 +13,23 @@ declare(strict_types=1);
 
 namespace League\Csv;
 
-use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use SplTempFileObject;
 use TypeError;
-
-use function chr;
 
 #[Group('csv')]
 final class InfoTest extends TestCase
 {
     public function testDetectDelimiterListWithInvalidRowLimit(): void
     {
-        $this->expectException(Exception::class);
-
         $file = new SplTempFileObject();
         $file->fwrite("How are you today ?\nI'm doing fine thanks!");
         $csv = Reader::createFromFileObject($file);
 
-        Info::getDelimiterStats($csv, [','], -4);
+        $this->expectException(Exception::class);
+
+        Info::getDelimiterStats($csv, [','], -4); /* @phpstan-ignore-line */
     }
 
     public function testDetectDelimiterListWithInvalidDelimiter(): void
@@ -67,9 +64,9 @@ final class InfoTest extends TestCase
     public function testDetectDelimiterListWithInconsistentCSV(): void
     {
         $data = new SplTempFileObject();
-        $data->setCsvControl(';');
+        $data->setCsvControl(separator: ';', escape: '\\');
         $data->fputcsv(['toto', 'tata', 'tutu']);
-        $data->setCsvControl('|');
+        $data->setCsvControl('|', escape: '\\');
         $data->fputcsv(['toto', 'tata', 'tutu']);
         $data->fputcsv(['toto', 'tata', 'tutu']);
         $data->fputcsv(['toto', 'tata', 'tutu']);
@@ -102,48 +99,5 @@ EOF;
         $reader = Reader::createFromString($text);
 
         self::assertSame($expected, Info::getDelimiterStats($reader, [';', ','], 1));
-    }
-
-    #[DataProvider('ByteSequenceMatchProvider')]
-    public function testByteSequenceMatch(string $str, string $expected, ?string $method_expected): void
-    {
-        self::assertSame($expected, Info::fetchBOMSequence($str) ?? '');
-        self::assertSame($method_expected, Info::fetchBOMSequence($str));
-    }
-
-    public static function ByteSequenceMatchProvider(): array
-    {
-        return [
-            'empty string' => [
-                'sequence' => '',
-                'expected' => '',
-                'method_expected' => null,
-            ],
-            'random string' => [
-                'sequence' => 'foo bar',
-                'expected' => '',
-                'method_expected' => null,
-            ],
-            'UTF8 BOM sequence' => [
-                'sequence' => chr(239).chr(187).chr(191),
-                'expected' => ByteSequence::BOM_UTF8,
-                'method_expected' => ByteSequence::BOM_UTF8,
-            ],
-            'UTF8 BOM sequence at the start of a text' => [
-                'sequence' => ByteSequence::BOM_UTF8.'The quick brown fox jumps over the lazy dog',
-                'expected' => chr(239).chr(187).chr(191),
-                'method_expected' => chr(239).chr(187).chr(191),
-            ],
-            'UTF8 BOM sequence inside a text' => [
-                'sequence' => 'The quick brown fox '.ByteSequence::BOM_UTF8.' jumps over the lazy dog',
-                'expected' => '',
-                'method_expected' => null,
-            ],
-            'UTF32 LE BOM sequence' => [
-                'sequence' => chr(255).chr(254).chr(0).chr(0),
-                'expected' => ByteSequence::BOM_UTF32_LE,
-                'method_expected' => ByteSequence::BOM_UTF32_LE,
-            ],
-        ];
     }
 }

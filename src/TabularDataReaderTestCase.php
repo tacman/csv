@@ -13,15 +13,19 @@ declare(strict_types=1);
 
 namespace League\Csv;
 
+use DateTimeImmutable;
+use DateTimeInterface;
+use League\Csv\Serializer\MapCell;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Throwable;
 
 #[Group('tabulardata')]
 abstract class TabularDataReaderTestCase extends TestCase
 {
-    abstract protected function tabularData(): TabularDataReader;
+    abstract protected function tabularDataWithoutHeader(): TabularDataReader;
     abstract protected function tabularDataWithHeader(): TabularDataReader;
 
     /***************************
@@ -30,8 +34,8 @@ abstract class TabularDataReaderTestCase extends TestCase
 
     public function testExistsRecord(): void
     {
-        self::assertFalse(Statement::create()->process($this->tabularData())->exists(fn (array $record) => array_key_exists('foobar', $record)));
-        self::assertTrue(Statement::create()->process($this->tabularData())->exists(fn (array $record) => count($record) < 5));
+        self::assertFalse((new Statement())->process($this->tabularDataWithoutHeader())->exists(fn (array $record) => array_key_exists('foobar', $record)));
+        self::assertTrue((new Statement())->process($this->tabularDataWithoutHeader())->exists(fn (array $record) => count($record) < 5));
     }
 
     /***************************
@@ -41,7 +45,7 @@ abstract class TabularDataReaderTestCase extends TestCase
     #[Test]
     public function testTabularSelectWithoutHeader(): void
     {
-        self::assertSame([1 => 'temperature', 2 => 'place'], $this->tabularData()->select(1, 2)->first());
+        self::assertSame([1 => 'temperature', 2 => 'place'], $this->tabularDataWithoutHeader()->select(1, 2)->first());
     }
 
     #[Test]
@@ -57,7 +61,7 @@ abstract class TabularDataReaderTestCase extends TestCase
     {
         $this->expectException(InvalidArgument::class);
 
-        $this->tabularData()
+        $this->tabularDataWithoutHeader()
             ->select('temperature', 'place');
     }
 
@@ -78,6 +82,50 @@ abstract class TabularDataReaderTestCase extends TestCase
     }
 
     /***************************
+     * TabularDataReader::selectAllExcept
+     ****************************/
+
+
+    #[Test]
+    public function testTabularselectAllExceptWithoutHeader(): void
+    {
+        self::assertSame([1 => 'temperature', 2 => 'place'], $this->tabularDataWithoutHeader()->selectAllExcept(0)->first());
+    }
+
+    #[Test]
+    public function testTabularselectAllExceptWithHeader(): void
+    {
+        self::assertSame(['temperature' => '1', 'place' => 'Galway'], $this->tabularDataWithHeader()->selectAllExcept('date')->first());
+        self::assertSame(['place' => 'Galway'], $this->tabularDataWithHeader()->selectAllExcept('temperature', 'date')->first());
+        self::assertSame(['place' => 'Galway'], $this->tabularDataWithHeader()->selectAllExcept(1, 'date')->first());
+        self::assertSame(['place' => 'Galway'], $this->tabularDataWithHeader()->selectAllExcept('temperature', 0)->first());
+    }
+
+    public function testTabularReaderselectAllExceptFailsWithInvalidColumn(): void
+    {
+        $this->expectException(InvalidArgument::class);
+
+        $this->tabularDataWithoutHeader()
+            ->selectAllExcept('temperature', 'place');
+    }
+
+    public function testTabularReaderselectAllExceptFailsWithInvalidColumnName(): void
+    {
+        $this->expectException(InvalidArgument::class);
+
+        $this->tabularDataWithHeader()
+            ->selectAllExcept('temperature', 'foobar');
+    }
+
+    public function testTabularReaderselectAllExceptFailsWithInvalidColumnOffset(): void
+    {
+        $this->expectException(InvalidArgument::class);
+
+        $this->tabularDataWithHeader()
+            ->selectAllExcept(0, 18);
+    }
+
+    /***************************
      * TabularDataReader::matching, matchingFirst, matchingFirstOrFail
      **************************/
 
@@ -85,7 +133,7 @@ abstract class TabularDataReaderTestCase extends TestCase
     #[DataProvider('provideValidExpressions')]
     public function it_can_select_a_specific_fragment(string $expression, ?array $expected): void
     {
-        $result = $this->tabularData()->matchingFirst($expression);
+        $result = $this->tabularDataWithoutHeader()->matchingFirst($expression);
         if (null === $expected) {
             self::assertNull($result);
 
@@ -102,12 +150,12 @@ abstract class TabularDataReaderTestCase extends TestCase
         if (null === $expected) {
             $this->expectException(FragmentNotFound::class);
 
-            $this->tabularData()->matchingFirstOrFail($expression);
+            $this->tabularDataWithoutHeader()->matchingFirstOrFail($expression);
 
             return;
         }
 
-        self::assertSame($expected, [...$this->tabularData()->matchingFirstOrFail($expression)]);
+        self::assertSame($expected, [...$this->tabularDataWithoutHeader()->matchingFirstOrFail($expression)]);
     }
 
     public static function provideValidExpressions(): iterable
@@ -229,36 +277,50 @@ abstract class TabularDataReaderTestCase extends TestCase
 
     #[Test]
     #[DataProvider('provideInvalidExpressions')]
-    public function it_will_return_null_on_invalid_expression(string $expression): void
+    public function it_will_fail_to_parse_invalid_expression(string $expression): void
     {
-        self::assertNull($this->tabularData()->matchingFirst($expression));
-    }
+        $this->expectException(Throwable::class);
 
-    #[Test]
-    #[DataProvider('provideInvalidExpressions')]
-    public function it_will_fail_to_parse_the_expression(string $expression): void
-    {
-        $this->expectException(FragmentNotFound::class);
-
-        $this->tabularData()->matchingFirstOrFail($expression);
+        $this->tabularDataWithoutHeader()->matchingFirstOrFail($expression);
     }
 
     public static function provideInvalidExpressions(): iterable
     {
         return [
-            'missing expression type' => ['2-4'],
+            'expression selection is invalid for cell 1' => ['expression' => 'cell=5'],
+            'expression selection is invalid for row or column 1' => ['expression' => 'row=4,3'],
+            'expression selection is invalid for row or column 2' => ['expression' => 'row=four-five'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('provideExpressionWithIgnoredSelections')]
+    public function it_will_return_null_on_invalid_expression(string $expression): void
+    {
+        self::assertNull($this->tabularDataWithoutHeader()->matchingFirst($expression));
+    }
+
+    #[Test]
+    #[DataProvider('provideExpressionWithIgnoredSelections')]
+    public function it_will_fail_to_parse_the_expression(string $expression): void
+    {
+        $this->expectException(FragmentNotFound::class);
+
+        $this->tabularDataWithoutHeader()->matchingFirstOrFail($expression);
+    }
+
+    public static function provideExpressionWithIgnoredSelections(): iterable
+    {
+        return [
             'missing expression selection row' => ['row='],
             'missing expression selection cell' => ['cell='],
             'missing expression selection coll' => ['col='],
-            'expression selection is invalid for cell 1' => ['cell=5'],
             'expression selection is invalid for cell 2' => ['cell=0,3'],
             'expression selection is invalid for cell 3' => ['cell=3,0'],
             'expression selection is invalid for cell 4' => ['cell=1,3-0,4'],
             'expression selection is invalid for cell 5' => ['cell=1,3-4,0'],
             'expression selection is invalid for cell 6' => ['cell=0,3-1,4'],
             'expression selection is invalid for cell 7' => ['cell=1,0-2,3'],
-            'expression selection is invalid for row or column 1' => ['row=4,3'],
-            'expression selection is invalid for row or column 2' => ['row=four-five'],
             'expression selection is invalid for row or column 3' => ['row=0-3'],
             'expression selection is invalid for row or column 4' => ['row=3-0'],
         ];
@@ -267,19 +329,19 @@ abstract class TabularDataReaderTestCase extends TestCase
     #[Test]
     public function it_returns_multiple_selections_in_one_tabular_data_instance(): void
     {
-        self::assertCount(1, $this->tabularData()->matching('row=1-2;5-4;2-4'));
+        self::assertCount(1, $this->tabularDataWithoutHeader()->matching('row=1-2;5-4;2-4'));
     }
 
     #[Test]
     public function it_returns_no_selection(): void
     {
-        self::assertCount(1, $this->tabularData()->matching('row=5-4'));
+        self::assertCount(1, $this->tabularDataWithoutHeader()->matching('row=5-4'));
     }
 
     #[Test]
     public function it_fails_if_no_selection_is_found(): void
     {
-        self::assertCount(1, iterator_to_array($this->tabularData()->matchingFirstOrFail('row=7-8')));
+        self::assertCount(1, iterator_to_array($this->tabularDataWithoutHeader()->matchingFirstOrFail('row=7-8')));
     }
 
     #[Test]
@@ -287,7 +349,16 @@ abstract class TabularDataReaderTestCase extends TestCase
     {
         $this->expectException(FragmentNotFound::class);
 
-        $this->tabularData()->matchingFirstOrFail('row=42');
+        $this->tabularDataWithoutHeader()->matchingFirstOrFail('row=42');
+    }
+
+    /***************************
+     * TabularDataReader::map
+     ****************************/
+
+    public function testMap(): void
+    {
+        self::assertContains(42, $this->tabularDataWithoutHeader()->map(fn (array $record, int $offset): int => 42));
     }
 
     /***************************
@@ -296,7 +367,7 @@ abstract class TabularDataReaderTestCase extends TestCase
 
     public function testReduce(): void
     {
-        self::assertSame(21, $this->tabularData()->reduce(fn (?int $carry, array $record): int => ($carry ?? 0) + count($record)));
+        self::assertSame(21, $this->tabularDataWithoutHeader()->reduce(fn (?int $carry, array $record): int => ($carry ?? 0) + count($record)));
     }
 
     /***************************
@@ -306,7 +377,7 @@ abstract class TabularDataReaderTestCase extends TestCase
     public function testEach(): void
     {
         $recordsCopy = [];
-        $tabularData = $this->tabularData();
+        $tabularData = $this->tabularDataWithoutHeader();
         $tabularData->each(function (array $record, string|int $offset) use (&$recordsCopy) {
             $recordsCopy[$offset] = $record;
 
@@ -349,24 +420,139 @@ abstract class TabularDataReaderTestCase extends TestCase
     {
         self::assertContains(
             ['2011-01-01', '1', 'Galway'],
-            [...$this->tabularData()->slice(1)]
+            [...$this->tabularDataWithoutHeader()->slice(1)]
         );
     }
 
     public function testCountable(): void
     {
-        self::assertCount(1, $this->tabularData()->slice(1, 1));
-        self::assertCount(7, $this->tabularData());
+        self::assertCount(1, $this->tabularDataWithoutHeader()->slice(1, 1));
+        self::assertCount(7, $this->tabularDataWithoutHeader());
         self::assertCount(6, $this->tabularDataWithHeader());
     }
 
     public function testValue(): void
     {
-        self::assertNull($this->tabularData()->value(42));
-        self::assertNull($this->tabularData()->value('place'));
-        self::assertSame('place', $this->tabularData()->value(2));
+        self::assertNull($this->tabularDataWithoutHeader()->value(42));
+        self::assertNull($this->tabularDataWithoutHeader()->value('place'));
+        self::assertSame('place', $this->tabularDataWithoutHeader()->value(2));
         self::assertSame('2011-01-01', $this->tabularDataWithHeader()->value());
         self::assertSame('Galway', $this->tabularDataWithHeader()->value(2));
         self::assertSame('Galway', $this->tabularDataWithHeader()->value('place'));
     }
+
+    /***************************
+     * TabularDataReader::getRecordsAsOject
+     ****************************/
+
+    public function testGetObjectWithHeader(): void
+    {
+        $class = new class (5, Place::Galway, new DateTimeImmutable()) {
+            public function __construct(
+                public readonly float $temperature,
+                public readonly Place $place,
+                #[MapCell(
+                    column: 'date',
+                    options: ['format' => '!Y-m-d', 'timezone' => 'Africa/Kinshasa'],
+                )]
+                public readonly DateTimeInterface $observedOn
+            ) {
+            }
+        };
+
+        foreach ($this->tabularDataWithHeader()->getRecordsAsObject($class::class) as $object) {
+            self::assertInstanceOf($class::class, $object);
+        }
+    }
+
+    public function testGetObjectWithoutHeader(): void
+    {
+        $class = new class (5, Place::Galway, new DateTimeImmutable()) {
+            public function __construct(
+                #[MapCell(column: 1)]
+                public readonly float $temperature,
+                #[MapCell(column: 2)]
+                public readonly Place $place,
+                #[MapCell(column: 0)]
+                public readonly DateTimeInterface $observedOn
+            ) {
+            }
+        };
+
+        foreach ($this->tabularDataWithHeader()->getRecordsAsObject($class::class) as $object) {
+            self::assertInstanceOf($class::class, $object);
+        }
+    }
+
+    public function testGetNthObjectWithHeader(): void
+    {
+        $class = new class (5, Place::Galway, new DateTimeImmutable()) {
+            public function __construct(
+                public readonly float $temperature,
+                public readonly Place $place,
+                #[MapCell(
+                    column: 'date',
+                    options: ['format' => '!Y-m-d', 'timezone' => 'Africa/Kinshasa'],
+                )]
+                public readonly DateTimeInterface $observedOn
+            ) {
+            }
+        };
+
+        self::assertInstanceOf($class::class, $this->tabularDataWithHeader()->nthAsObject(2, $class::class));
+        self::assertInstanceOf($class::class, $this->tabularDataWithHeader()->firstAsObject($class::class));
+        self::assertNull($this->tabularDataWithHeader()->nthAsObject(42, $class::class));
+    }
+
+    public function testGetNthObjectWithCustomHeader(): void
+    {
+        $class = new class (5, Place::Galway, new DateTimeImmutable()) {
+            public function __construct(
+                public readonly float $temperature,
+                public readonly Place $place,
+                public readonly DateTimeInterface $observedOn
+            ) {
+            }
+        };
+
+        self::assertInstanceOf($class::class, $this->tabularDataWithHeader()->firstAsObject($class::class, ['observedOn', 'temperature', 'place']));
+    }
+
+    public function testChunkingTabularDataUsingTheRangeMethod(): void
+    {
+        self::assertCount(2, [...$this->tabularDataWithHeader()->chunkBy(4)]);
+    }
+
+    /**************************************************************
+     * TabularDataReader::last and TabularDataReader::lastAsObject
+     **************************************************************/
+
+    #[Test]
+    public function it_will_create_a_datable_with_a_header(): void
+    {
+        $weather = new class (new DateTimeImmutable(), 6, 'Brussels') {
+            public function __construct(
+                public readonly DateTimeImmutable $date,
+                public readonly int $temperature,
+                public readonly string $place,
+            ) {
+            }
+        };
+
+        $tabularData = $this->tabularDataWithHeader();
+        $last = $tabularData->last();
+        $objLast = $tabularData->lastAsObject($weather::class);
+
+        self::assertSame(['date' => '2011-01-03', 'temperature' => '5', 'place' => 'Berkeley'], $last);
+        self::assertInstanceOf($weather::class, $objLast);
+        self::assertEquals(new DateTimeImmutable('2011-01-03'), $objLast->date);
+        self::assertSame(5, $objLast->temperature);
+        self::assertEquals('Berkeley', $objLast->place);
+    }
+}
+
+enum Place: string
+{
+    case Galway = 'Galway';
+    case Berkeley = 'Berkeley';
 }

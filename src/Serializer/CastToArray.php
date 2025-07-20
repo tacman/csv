@@ -14,67 +14,110 @@ declare(strict_types=1);
 namespace League\Csv\Serializer;
 
 use JsonException;
-
+use League\Csv\Exception;
+use League\Csv\Reader;
 use ReflectionParameter;
 use ReflectionProperty;
 
+use function array_map;
 use function explode;
+use function filter_var;
 use function is_array;
 use function json_decode;
-use function str_getcsv;
 use function strlen;
 
 use const FILTER_REQUIRE_ARRAY;
 use const JSON_THROW_ON_ERROR;
 
 /**
- * @implements TypeCasting<?array>
+ * @implements TypeCasting<array|null>
  */
 final class CastToArray implements TypeCasting
 {
     private readonly Type $type;
     private readonly bool $isNullable;
-    private readonly int $filterFlag;
-    private readonly ArrayShape $shape;
+    private ArrayShape $shape;
+    private int $filterFlag;
+    /** @var non-empty-string */
+    private string $separator = ',';
+    private string $delimiter = '';
+    private string $enclosure = '"';
+    /** @var int<1, max> $depth */
+    private int $depth = 512;
+    private int $flags = 0;
+    private ?array $default = null;
+    private bool $trimElementValueBeforeCasting = false;
+    private ?int $headerOffset = null;
+    private readonly TypeCastingInfo $info;
+
+    /**
+     * @throws MappingFailed
+     */
+    public function __construct(ReflectionProperty|ReflectionParameter $reflectionProperty)
+    {
+        [$this->type, $this->isNullable] = $this->init($reflectionProperty);
+        $this->shape = ArrayShape::List;
+        $this->filterFlag = Type::String->filterFlag();
+        $this->info = TypeCastingInfo::fromAccessor($reflectionProperty);
+    }
+
+    public function info(): TypeCastingInfo
+    {
+        return $this->info;
+    }
 
     /**
      * @param non-empty-string $delimiter
-     * @param int<1, max> $jsonDepth
+     * @param non-empty-string $separator
+     * @param int<1, max> $depth
      *
      * @throws MappingFailed
      */
-    public function __construct(
-        ReflectionProperty|ReflectionParameter $reflectionProperty,
-        private readonly ?array $default = null,
+    public function setOptions(
+        ?array $default = null,
         ArrayShape|string $shape = ArrayShape::List,
-        private readonly string $delimiter = ',',
-        private readonly string $enclosure = '"',
-        private readonly int $jsonDepth = 512,
-        private readonly int $jsonFlags = 0,
+        string $separator = ',',
+        string $delimiter = ',',
+        string $enclosure = '"',
+        int $depth = 512,
+        int $flags = 0,
         Type|string $type = Type::String,
-    ) {
-        [$this->type, $this->isNullable] = $this->init($reflectionProperty);
+        bool $trimElementValueBeforeCasting = false,
+        ?int $headerOffset = null,
+    ): void {
         if (!$shape instanceof ArrayShape) {
-            $shape = ArrayShape::tryFrom($shape) ?? throw new MappingFailed('Unable to resolve the array shape; Verify your cast arguments.');
+            $shape = ArrayShape::tryFrom($shape) ?? throw new MappingFailed('Unable to resolve the array shape; Verify your options arguments.');
+        }
+
+        if (!$type instanceof Type) {
+            $type = Type::tryFrom($type) ?? throw new MappingFailed('Unable to resolve the array value type; Verify your options arguments.');
         }
 
         $this->shape = $shape;
+        $this->depth = $depth;
+        $this->separator = $separator;
+        $this->delimiter = $delimiter;
+        $this->enclosure = $enclosure;
+        $this->flags = $flags;
+        $this->default = $default;
         $this->filterFlag = match (true) {
-            1 > $this->jsonDepth && $this->shape->equals(ArrayShape::Json) => throw new MappingFailed('the json depth can not be less than 1.'),
-            1 > strlen($this->delimiter) && $this->shape->equals(ArrayShape::List) => throw new MappingFailed('expects delimiter to be a non-empty string for list conversion; emtpy string given.'),
+            1 > $this->depth && $this->shape->equals(ArrayShape::Json) => throw new MappingFailed('the json depth can not be less than 1.'),
+            1 > strlen($this->separator) && $this->shape->equals(ArrayShape::List) => throw new MappingFailed('expects separator to be a non-empty string for list conversion; empty string given.'),
             1 !== strlen($this->delimiter) && $this->shape->equals(ArrayShape::Csv) => throw new MappingFailed('expects delimiter to be a single character for CSV conversion; `'.$this->delimiter.'` given.'),
             1 !== strlen($this->enclosure) && $this->shape->equals(ArrayShape::Csv) => throw new MappingFailed('expects enclosure to be a single character; `'.$this->enclosure.'` given.'),
             default => $this->resolveFilterFlag($type),
         };
+        $this->trimElementValueBeforeCasting = $trimElementValueBeforeCasting;
+        $this->headerOffset = $headerOffset;
     }
 
-    public function toVariable(?string $value): ?array
+    public function toVariable(mixed $value): ?array
     {
         if (null === $value) {
             return match (true) {
                 $this->isNullable,
                 Type::Mixed->equals($this->type) => $this->default,
-                default => throw TypeCastingFailed::dueToNotNullableType($this->type->value),
+                default => throw TypeCastingFailed::dueToNotNullableType($this->type->value, info: $this->info),
             };
         }
 
@@ -82,41 +125,76 @@ final class CastToArray implements TypeCasting
             return [];
         }
 
-        try {
-            $result = match ($this->shape) {
-                ArrayShape::Json => json_decode($value, true, $this->jsonDepth, $this->jsonFlags | JSON_THROW_ON_ERROR),
-                ArrayShape::List => filter_var(explode($this->delimiter, $value), $this->filterFlag, FILTER_REQUIRE_ARRAY),
-                ArrayShape::Csv => filter_var(str_getcsv($value, $this->delimiter, $this->enclosure, ''), $this->filterFlag, FILTER_REQUIRE_ARRAY),
-            };
+        if (is_array($value)) {
+            return $value;
+        }
 
-            if (!is_array($result)) {
-                throw TypeCastingFailed::dueToInvalidValue($value, $this->type->value);
+        if (!is_string($value)) {
+            throw TypeCastingFailed::dueToInvalidValue($value, $this->type->value, info: $this->info);
+        }
+
+        if ($this->shape->equals(ArrayShape::Json)) {
+            try {
+                $data = json_decode($value, true, $this->depth, $this->flags | JSON_THROW_ON_ERROR);
+            } catch (JsonException $exception) {
+                throw TypeCastingFailed::dueToInvalidValue($value, $this->type->value, $exception, $this->info);
             }
 
-            return $result;
+            if (!is_array($data)) {
+                throw TypeCastingFailed::dueToInvalidValue($value, $this->type->value, info: $this->info);
+            }
 
-        } catch (JsonException $exception) {
-            throw TypeCastingFailed::dueToInvalidValue($value, $this->type->value, $exception);
+            return $data;
         }
+
+        if ($this->shape->equals(ArrayShape::Csv)) {
+            try {
+                $data = Reader::createFromString($value);
+                $data->setDelimiter($this->delimiter);
+                $data->setEnclosure($this->enclosure);
+                $data->setEscape('');
+                $data->setHeaderOffset($this->headerOffset);
+                if ($this->trimElementValueBeforeCasting) {
+                    $data->addFormatter($this->trimString(...));
+                }
+                $data->addFormatter($this->filterElement(...));
+
+                return [...$data];
+            } catch (Exception $exception) {
+                throw TypeCastingFailed::dueToInvalidValue($value, $this->type->value, $exception, $this->info);
+            }
+        }
+
+        $data = explode($this->separator, $value);
+
+        return $this->filterElement(match (true) {
+            $this->trimElementValueBeforeCasting => $this->trimString($data),
+            default => $data,
+        });
+    }
+
+    private function trimString(array $record): array
+    {
+        return array_map(
+            fn (mixed $value): mixed => is_string($value) ? trim($value) : $value,
+            $record
+        );
+    }
+
+    private function filterElement(array $record): array
+    {
+        return filter_var($record, $this->filterFlag, FILTER_REQUIRE_ARRAY);
     }
 
     /**
      * @throws MappingFailed if the type is not supported
      */
-    private function resolveFilterFlag(Type|string $type): int
+    private function resolveFilterFlag(?Type $type): int
     {
-        if ($this->shape->equals(ArrayShape::Json)) {
-            return Type::String->filterFlag();
-        }
-
-        if (!$type instanceof Type) {
-            $type = Type::tryFrom($type);
-        }
-
         return match (true) {
-            !$type instanceof Type,
-            !$type->isScalar() => throw new MappingFailed('Only scalar type are supported for `array` value casting.'),
-            default => $type->filterFlag(),
+            $this->shape->equals(ArrayShape::Json) => Type::String->filterFlag(),
+            $type instanceof Type && $type->isOneOf(Type::Bool, Type::True, Type::False, Type::String, Type::Float, Type::Int) => $type->filterFlag(),
+            default => throw new MappingFailed('Only scalar type are supported for `array` value casting.'),
         };
     }
 
@@ -125,6 +203,10 @@ final class CastToArray implements TypeCasting
      */
     private function init(ReflectionProperty|ReflectionParameter $reflectionProperty): array
     {
+        if (null === $reflectionProperty->getType()) {
+            return [Type::Mixed, true];
+        }
+
         $type = null;
         $isNullable = false;
         foreach (Type::list($reflectionProperty) as $found) {

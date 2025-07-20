@@ -45,7 +45,7 @@ leaving your source data unchanged.
 
 While the `TabularDataReader` is not a fully fledged collection instance it still exposes a lots of methods
 that fall into the category of records collection manipulations. Because chaining is at the core of most of
-its methods you can be sure that each manipulation returns a new instance preserving your original data.
+the methods you can be sure that each manipulation returns a new instance preserving your original data.
 
 ### Countable, IteratorAggregate
 
@@ -97,7 +97,7 @@ Aboubakar,6,M,2004
 CSV;
 
 $reader = Reader::createFromString($csv);
-$resultSet = Statement::create()->process($reader);
+$resultSet = (new Statement())->process($reader);
 $records = $resultSet->getRecords([3 => 'Year', 0 => 'Firstname', 4 => 'Yolo']);
 var_dump([...$records][0]);
 //returns something like this
@@ -117,31 +117,37 @@ returned iterator. Added column will only contain the `null` value.
 
 <p class="message-warning">If the header record contains non-unique string values, a <code>Exception</code> exception is triggered.</p>
 
-### getObjects
+### getRecordsAsObject
 
-<p class="message-notice">Added in version <code>9.12.0</code> for <code>Reader</code> and <code>ResultSet</code>.</p>
+`getObjects` is deprecated in favor of `getRecordsAsObject` to make the public API more consistent.
+
+<p class="message-notice"><code>getObjects</code> Added in version <code>9.12.0</code> for <code>Reader</code> and <code>ResultSet</code>.</p>
+<p class="message-notice"><code>getRecordsAsObject</code> Added in version <code>9.15.0</code> for <code>Reader</code> and <code>ResultSet</code>.</p>
 
 If you prefer working with objects instead of arrays it is possible to deserialize your CSV document using
-the `getObjects` method. This method will convert each CSV record into your specified class instances.
+the `getRecordsAsObject` method. This method will convert each CSV record into your specified class instances.
 
 ```php
 $csv = Reader::createFromString($document);
 $csv->setHeaderOffset(0);
-foreach ($csv->getObjects(ClimaticRecord::class) as $instance) {
+foreach ($csv->getRecordsAsObject(ClimaticRecord::class) as $instance) {
     // each $instance entry will be an instance of the Weather class;
 }
 ```
 
-The `getObjects` method can take an optional `$header` argument which is the same mapper argument as the one use
+The `getRecordsAsObject` method can take an optional `$header` argument which is the same mapper argument as the one use
 with the `getRecords` method.
 
 <p class="message-info">You can get more info on how to configure your class to enable this feature by
 visiting the <a href="/9.0/reader/record-mapping">record mapping documentation</a> page</p>
 
-### value, first and nth
+### value, first, last, nth, firstAsObject, lastAsObject and nthAsObject
 
+<p class="message-notice"><code>firstAsObject and nthAsObject</code> were added in version <code>9.14.0</code> for <code>Reader</code> and <code>ResultSet</code>.</p>
 <p class="message-notice"><code>first and nth</code> were added in version <code>9.9.0</code> for <code>Reader</code> and <code>ResultSet</code>.</p>
 <p class="message-notice"><code>value</code> was added in version <code>9.12.0</code> for <code>Reader</code> and <code>ResultSet</code>.</p>
+<p class="message-notice"><code>last and lastAsObject</code> was added in version <code>9.23.0</code> for <code>Buffer</code>.</p>
+<p class="message-notice"><code>last and lastAsObject</code> was added in version <code>9.24.0</code> for <code>Reader</code> and <code>ResultSet</code>.</p>
 
 You may access any record using its offset starting at `0` in the collection using the `nth` method.
 if no record is found, an empty `array` is returned.
@@ -153,7 +159,7 @@ use League\Csv\Statement;
 $reader = Reader::createFromPath('/path/to/my/file.csv', 'r');
 $reader->setHeaderOffset(0);
 
-$stmt = Statement::create()
+$stmt = (new Statement())
     ->offset(10)
     ->limit(12)
 ;
@@ -167,10 +173,15 @@ $result->nth(3);
 
 $result->first();
 $result->nth(0);
-//returns the first matching record from the recordset or an empty record if none is found.
+// returns the first matching record from the resultset or an empty record if none is found.
+$result->last();
+// returns the last matching record from the resultset or an empty record if none is found.
 ```
 
-As an alias to `nth`, the `first` method returns the first record from the instance without the need of an argument.
+As an alias to `nth`, the `first` method returns the first record from the instance without
+the need of an argument. The `last` method returns the last record from the instance. It
+is specifically crafted to keep a decent performance even when the underlying document
+is a huge file.
 
 If you are only interested in retrieving a specific value from a single row, you can use
 the `value` method. By default, it will return the first record item, but you are free
@@ -184,19 +195,35 @@ use League\Csv\Statement;
 $reader = Reader::createFromPath('/path/to/my/file.csv', 'r');
 $reader->setHeaderOffset(0);
 
-$stmt = Statement::create()
+$stmt = (new Statement())
     ->offset(10)
     ->limit(12)
 ;
 $result = $stmt->process($reader);
 $result->value(2);       //returns 'john.doe@example.com'
 $result->value('email'); //returns 'john.doe@example.com'
-$result->value('toto'); //returns null
-$result->value(42); //returns null
+$result->value('toto');  //returns null
+$result->value(42);      //returns null
 ```
 
 <p class="message-warning">The <code>fetchOne</code> method was deprecated in version <code>9.9.0</code>.
-it is recommanded to use the <code>nth</code> method instead.</p>
+it is recommended to use the <code>nth</code> method instead.</p>
+
+`firstAsObject` and `nthAsObject` are counterpart of `first` and `nth` respectively but
+returns `null` or an instance of the specified object. The methods require, in addition
+to the record offset, the class name and optionally a header mapper just
+like `getRecordsAsObjects`.
+
+```php
+use League\Csv\Reader;
+use League\Csv\Statement;
+
+$csv = Reader::createFromPath('/path/to/my/file.csv', 'r');
+$csv->setHeaderOffset(0);
+
+$csv->nthAsObject(3, ClimaticRecord::class);
+$csv->firstAsObject(OtherClimatRecord::class, [2 => 'observedOn', 1 => 'temparature', 0 => 'place']);
+```
 
 ### exists
 
@@ -209,7 +236,7 @@ use League\Csv\Reader;
 use League\Csv\Statement;
 
 $reader = Reader::createFromPath('/path/to/my/file.csv', 'r');
-$resultSet = Statement::create()->process($reader);
+$resultSet = (new Statement())->process($reader);
 
 $exists = $resultSet->exists(fn (array $records) => in_array('twenty-five', $records, true));
 
@@ -218,6 +245,30 @@ $exists = $resultSet->exists(fn (array $records) => in_array('twenty-five', $rec
 
 ## Selecting columns
 
+### fetchColumn
+
+The `fetchColumn` returns an Iterator containing all the values of a single column specified by its
+header offset if you provide an integer or its header name if you provide a string name that exists.
+
+```php
+$reader = Reader::createFromPath('/path/to/my/file.csv');
+$reader->setHeaderOffset(0);
+$records = (new Statement())->process($reader);
+foreach ($records->fetchColumn(3) as $value) {
+    //$value is a string representing the value
+    //of a given record for the selected column
+    //$value may be equal to 'john.doe@example.com'
+}
+
+foreach ($records->fetchColumn('3') as $value) {
+    //$value is a string representing the value
+    //of a given record for the selected column whose name is '3'
+    //$value may be equal to 'john.doe@example.com'
+}
+```
+
+Two additional methods are added to ease distinguish usage
+
 ### fetchColumnByName
 
 The `fetchColumnByName` returns an Iterator containing all the values of a single column specified by its header name if it exists.
@@ -225,7 +276,7 @@ The `fetchColumnByName` returns an Iterator containing all the values of a singl
 ```php
 $reader = Reader::createFromPath('/path/to/my/file.csv');
 $reader->setHeaderOffset(0);
-$records = Statement::create()->process($reader);
+$records = (new Statement())->process($reader);
 foreach ($records->fetchColumnByName('e-mail') as $value) {
     //$value is a string representing the value
     //of a given record for the selected column
@@ -243,7 +294,7 @@ header offset.
 ```php
 $reader = Reader::createFromPath('/path/to/my/file.csv');
 $reader->setHeaderOffset(0);
-$records = Statement::create()->process($reader);
+$records = (new Statement())->process($reader);
 foreach ($records->fetchColumnByOffset(3) as $value) {
     //$value is a string representing the value
     //of a given record for the selected column
@@ -255,7 +306,7 @@ foreach ($records->fetchColumnByOffset(3) as $value) {
 
 ### fetchPairs
 
-The `fetchPairs` method returns a Iterator of key-value pairs from two tabular data columns. The method
+The `fetchPairs` method returns an Iterator of key-value pairs from two tabular data columns. The method
 expect 2 arguments, both can be:
 
 - an integer which represents the column name index;
@@ -276,7 +327,7 @@ sacha
 EOF;
 
 $reader = Reader::createFromString($str);
-$records = Statement::create()->process($reader);
+$records = (new Statement())->process($reader);
 
 foreach ($records->fetchPairs() as $firstname => $lastname) {
     // - first iteration
@@ -309,7 +360,7 @@ foreach ($records->fetchPairs() as $firstname => $lastname) {
 
 <p class="message-notice">Added in version <code>9.11.0</code> for <code>Reader</code> and <code>ResultSet</code>.</p>
 
-The `each` method iterates over the records in the tabular data collection and passes each reacord to a
+The `each` method iterates over the records in the tabular data collection and passes each record to a
 closure.
 
 ```php
@@ -353,6 +404,28 @@ $nbTotalCells = $resultSet->reduce(fn (?int $carry, array $records) => ($carry ?
 
 The closure is similar as the one used with `array_reduce`.
 
+### map
+
+<p class="message-notice">Added in version <code>9.21.0</code> for <code>Reader</code> and <code>ResultSet</code>.</p>
+
+The `map` method iterates over the tabular data records on map the found records to a defined structure.
+
+```php
+use League\Csv\Reader;
+use League\Csv\ResultSet;
+
+$reader = Reader::createFromPath('/path/to/my/file.csv', 'r');
+$resultSet = ResultSet::createFromTabularDataReader($reader);
+
+$mapper = fn (array $records, int $offset): int => 42;
+foreach ($resultSet->map($mapper) as $member) {
+    echo $member; //will always return the integer 42.
+}
+```
+
+<p class="message-info">This method is useful if you want, for instance, to cast the record to an instance
+you do not have control over and thus you can not use any <code>*asObject</code> methods.</p>
+
 ## Collection methods
 
 The following methods return all a new `TabularDataReader` instance.
@@ -370,7 +443,7 @@ use League\Csv\Reader;
 $reader = Reader::createFromPath('/path/to/my/file.csv', 'r');
 $records = $reader->filter(fn (array $record): => 5 === count($record));
 
-//$recors is a ResultSet object with only records with 5 elements
+//$records is a ResultSet object with only records with 5 elements
 ```
 
 <p class="message-info"> Wraps the functionality of <code>Statement::where</code>.</p>
@@ -403,7 +476,7 @@ use League\Csv\Reader;
 use League\Csv\Statement;
 
 $reader = Reader::createFromPath('/path/to/my/file.csv', 'r');
-$resultSet = Statement::create()->process($reader);
+$resultSet = (new Statement())->process($reader);
 
 $records = $resultSet->slice(10, 25);
 
@@ -414,12 +487,12 @@ $records = $resultSet->slice(10, 25);
 <p class="message-info"> Wraps the functionality of <code>Statement::offset</code> and <code>Statement::limit</code>.</p>
 <p class="message-notice">Added in version <code>9.11.0</code> for <code>Reader</code> and <code>ResultSet</code>.</p>
 
-### select
+### select and selectAllExcept
 
 You may not always want to select all columns from the tabular data. Using the `select` method,
-you can specify which columns to use. The column can be specified by their
-name if the instance `getHeader` returns a non-empty array or you can use
-the column offset or mix them both.
+you can specify which columns to use. The column can be specified by their name, if the instance
+`getHeader` returns a non-empty array, or you can default to using the column offset. You
+can even mix them both.
 
 ```php
 use League\Csv\Reader;
@@ -431,6 +504,57 @@ $reader = Reader::createFromPath('/path/to/my/file.csv')
 ```
 
 <p class="message-notice">Added in version <code>9.12.0</code> for <code>Reader</code> and <code>ResultSet</code>.</p>
+<p class="message-info"> Wraps the functionality of <code>Statement::select</code>.</p>
+
+In the event where you have a lot of fields to select but a few to remove you may use the `selectAllExcept` method
+to select all the fields except the one you will specify as argument to the method:
+
+```php
+use League\Csv\Reader;
+
+$reader = Reader::createFromPath('/path/to/my/file.csv')
+    ->selectAllExcept(3);
+
+//$reader is a new TabularDataReader with all the fields except the 4th one.
+// fields are re-indexed.
+```
+
+<p class="message-notice">Added in version <code>9.22.0</code> for <code>Reader</code> and <code>ResultSet</code>.</p>
+<p class="message-info"> Wraps the functionality of <code>Statement::selectAllExcept</code>.</p>
+
+### mapHeader
+
+<p class="message-notice">Added in version <code>9.15.0</code> for <code>Reader</code> and <code>ResultSet</code>.</p>
+<p class="message-info"> Wraps the functionality of <code>Statement::process</code>.</p>
+
+Complementary to the `select` method, the `mapHeader` method allows you to redefine the column header
+names and order and returns a new `TabularDataReader`. The submitted array argument act like the
+array from the `Statement::process` method but instead of returning a iterable structure of
+records it returns a new `TabularDataReader` with a new header.
+
+```php
+$tabularData = $reader
+    ->slice(0, 10)
+    ->mapHeader([
+        3 => 'Year',
+        2 => 'Gender',
+        0 => 'Firstname',
+        1 => 'Count',
+    ]);
+
+//is equivalent to
+
+$tabularData = (new Statement())
+    ->offset(0)
+    ->limit(10)
+    ->process($reader, [
+        3 => 'Year',
+        2 => 'Gender',
+        0 => 'Firstname',
+        1 => 'Count',
+    ]);
+$tabularData->getHeader(); // returns ['Year', 'Gender', 'Firstname', 'Count'];
+```
 
 ### matching, matchingFirst, matchingFirstOrFail
 
@@ -446,9 +570,28 @@ use League\Csv\Reader;
 $reader = Reader::createFromString($csv);
 
 $reader->matching('row=3-1;4-6'); //returns an iterable containing all the TabularDataReader instance that are valid.
-$reader->matchingFirst('row=3-1;4-6'); // will return 1 selected fragment as a TabularRaeaderData instance
+$reader->matchingFirst('row=3-1;4-6'); // will return 1 selected fragment as a TabularReaderData instance
 $reader->matchingFirstOrFail('row=3-1;4-6'); // will throw
 ```
 
 <p class="message-info"> Wraps the functionality of <code>FragmentFinder</code> class.</p>
 <p class="message-notice">Added in version <code>9.12.0</code> for <code>Reader</code> and <code>ResultSet</code>.</p>
+
+### chunkBy
+
+<p class="message-notice">Added in version <code>9.15.0</code> for <code>Reader</code> and <code>ResultSet</code>.</p>
+
+If you are dealing with a large CSV and you want it to be split in smaller sizes for better handling you can use
+the `chunkBy` method which breaks the `TabularDataReader` into multiple, smaller instances with a given size. The
+last instance may contain fewer records because of the chunk size you have chosen.
+
+```php
+use League\Csv\Reader;
+use League\Csv\TabularDataReader;
+use League\Csv\Writer;
+
+$chunks = Reader::createFromPath('path/to/a/huge/file.csv')->chunkBy(1000);
+foreach ($chunks as $chunk) {
+ // $chunk is a small CSV of 1000 records or less
+}
+```

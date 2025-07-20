@@ -18,14 +18,21 @@ use Iterator;
 use OutOfRangeException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 use function explode;
+use function fflush;
+use function fwrite;
 use function implode;
 use function mb_convert_encoding;
+use function rewind;
 use function stream_filter_register;
+use function stream_get_contents;
 use function stream_get_filters;
 use function strtoupper;
+use function substr;
+use function tmpfile;
 
 #[Group('converter')]
 #[Group('filter')]
@@ -59,7 +66,7 @@ final class CharsetConverterTest extends TestCase
     public function testCharsetConverterConvertsAnArray(): void
     {
         $expected = ['Batman', 'Superman', 'Anaïs'];
-        $raw = explode(',', mb_convert_encoding(implode(',', $expected), 'iso-8859-15', 'utf-8'));
+        $raw = explode(',', (string) mb_convert_encoding(implode(',', $expected), 'iso-8859-15', 'utf-8'));
         $converter = (new CharsetConverter())
             ->inputEncoding('iso-8859-15')
             ->inputEncoding('iso-8859-15')
@@ -82,9 +89,9 @@ final class CharsetConverterTest extends TestCase
     public function testCharsetConverterAsStreamFilter(): void
     {
         $expected = 'Batman,Superman,Anaïs';
-        $raw = mb_convert_encoding($expected, 'iso-8859-15', 'utf-8');
+        $raw = (string) mb_convert_encoding($expected, 'iso-8859-15', 'utf-8');
         $csv = Reader::createFromString($raw)
-            ->addStreamFilter('string.toupper');
+            ->appendStreamFilterOnRead('string.toupper');
         CharsetConverter::addTo($csv, 'iso-8859-15', 'utf-8');
 
         self::assertContains(CharsetConverter::FILTERNAME.'.*', stream_get_filters());
@@ -96,10 +103,10 @@ final class CharsetConverterTest extends TestCase
         $this->expectException(InvalidArgument::class);
         stream_filter_register(CharsetConverter::FILTERNAME.'.*', CharsetConverter::class);
         $expected = 'Batman,Superman,Anaïs';
-        $raw = mb_convert_encoding($expected, 'iso-8859-15', 'utf-8');
-        $csv = Reader::createFromString($raw)
-            ->addStreamFilter('string.toupper')
-            ->addStreamFilter('convert.league.csv.iso-8859-15:utf-8')
+        $raw = (string) mb_convert_encoding($expected, 'iso-8859-15', 'utf-8');
+        Reader::createFromString($raw)
+            ->appendStreamFilterOnRead('string.toupper')
+            ->appendStreamFilterOnRead('convert.league.csv.iso-8859-15:utf-8')
         ;
     }
 
@@ -215,7 +222,44 @@ end']],
     public static function providesBOMSequences(): iterable
     {
         yield 'BOM UTF-8' => [
-            'sequence' => ByteSequence::BOM_UTF8,
+            'sequence' => Bom::Utf8->value,
         ];
+    }
+
+    #[Test]
+    public function it_will_return_an_empty_string_if_the_multibyte_string_is_invalid(): void
+    {
+        /** @var resource $file */
+        $file = tmpfile();
+        CharsetConverter::appendOnWriteTo($file);
+
+        $dataStart = str_pad('', 128, 'joe');
+        $dataEnd = substr('💩', 0, 2);
+
+        fwrite($file, $dataStart.$dataEnd);
+        fflush($file);
+        rewind($file);
+        $fileContents = stream_get_contents($file);
+
+        self::assertNotSame($dataStart.$dataEnd, $fileContents);
+        self::assertSame('', $fileContents);
+    }
+
+    #[Test]
+    public function it_will_return_the_correct_cotent_if_the_strem_is_split_inside_a_multibyte_string(): void
+    {
+        /** @var resource $file */
+        $file = tmpfile();
+        CharsetConverter::appendOnReadTo($file);
+
+        fwrite($file, '💩');
+        fflush($file);
+
+        rewind($file);
+        self::assertSame(substr('💩', 0, 2), stream_get_contents($file, length: 2, offset: 0));
+        self::assertSame(substr('💩', 2), stream_get_contents($file, offset: 2));
+
+        rewind($file);
+        self::assertSame('💩', stream_get_contents($file));
     }
 }

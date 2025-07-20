@@ -7,14 +7,15 @@
 
 Csv is a library to ease parsing, writing and filtering CSV in PHP. 
 The library goal is to be powerful while remaining lightweight,
-by utilizing PHP native classes whenever possible.
+by utilizing PHP native features whenever possible.
 
 ## Highlights
 
-- Easy to use API
-- Read and Write to CSV documents in a memory efficient and scalable way
+- Straightforward API
+- Read from and Write to CSV documents in a memory efficient and scalable way
+- Flexible and powerful query features and array to object mapping.
+- Transform CSV documents into popular format (`JSON`, `XML` or `HTML`)
 - Support PHP stream filtering capabilities
-- Transform CSV documents into popular format (JSON, XML or HTML)
 - Fully documented
 - Fully unit tested
 - Framework-agnostic
@@ -25,7 +26,7 @@ Full documentation can be found at [csv.thephpleague.com](https://csv.thephpleag
 
 ## System Requirements
 
-You need the `mbstring` extension to use `Csv` and the latest stable version of PHP is recommended.
+You need the `ext-filter` extension to use `Csv` and the latest stable version of PHP is recommended.
 
 Please find below the PHP support for `Csv` version 9.
 
@@ -39,7 +40,8 @@ Please find below the PHP support for `Csv` version 9.
 | 9.7.0                | PHP 7.3.0        | PHP 8.0.x                  |
 | 9.7.3                | PHP 7.3.0        | PHP 8.1.x                  |
 | 9.8.0                | PHP 7.4.0        | PHP 8.1.x                  |
-| 9.9.0                | PHP 8.1.2        | PHP 8.x                    |
+| 9.9.0                | PHP 8.1.2        | PHP 8.3.x                  |
+| 9.16.0               | PHP 8.1.2        | PHP 8.x                    |
 
 ## Install
 
@@ -50,6 +52,10 @@ composer require league/csv:^9.0
 ```
 
 ## Configuration
+
+> [!WARNING]
+> **Starting with PHP8.4 Deprecation notices will be trigger if you do not explicitly set the escape parameter.**
+> see [Deprecation for PHP8.4](https://wiki.php.net/rfc/deprecations_php_8_4#deprecate_proprietary_csv_escaping_mechanism) and [CSV and PHP8.4](https://nyamsprod.com/blog/csv-and-php8-4/)
 
 > [!TIP]
 > If your CSV document was created or is read on a **Legacy Macintosh computer**, add the following lines before 
